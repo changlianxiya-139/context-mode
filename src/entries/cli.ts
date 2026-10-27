@@ -87,7 +87,7 @@ function main(): void {
     process.exitCode = r.code;
     return;
   }
-  const child = spawn(process.execPath, [path.join(dir, r.file), ...r.args], { stdio: "inherit" });
+  const child = spawn(process.execPath, [path.join(dir, r.file), ...r.args], { stdio: "inherit", windowsHide: true });
   // Ctrl-C reaches the child through the terminal's process group; the CLI only waits and reports 130.
   process.on("SIGINT", () => {});
   child.on("error", (err) => {

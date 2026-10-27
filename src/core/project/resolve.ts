@@ -124,7 +124,7 @@ function firstLine(file: string): string | null {
 function git(dir: string, args: string[]): string[] {
   // GS6 (D-M7-HP-1): child_process loads only on this lazy path (containmentRoot), not on every hook call.
   const { spawnSync } = process.getBuiltinModule("node:child_process") as typeof import("node:child_process");
-  const r = spawnSync("git", args, { cwd: dir, shell: false, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const r = spawnSync("git", args, { cwd: dir, shell: false, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   if (r.error !== undefined || r.status !== 0) throw new CtxError("NO_GIT_DIR", { path: dir });
   return r.stdout.split("\n").filter((l) => l !== "");
 }

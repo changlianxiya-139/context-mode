@@ -150,7 +150,7 @@ export function buildIssueReport(command: string, res: SetupResult, ui: Ui): { t
 }
 
 function ghReady(env: SetupContext["env"]): boolean {
-  const r = spawnSync("gh", ["auth", "status"], { env, stdio: "ignore", timeout: 10_000 });
+  const r = spawnSync("gh", ["auth", "status"], { env, stdio: "ignore", timeout: 10_000, windowsHide: true });
   return r.status === 0;
 }
 
@@ -181,7 +181,7 @@ async function report(ui: Ui, command: string, res: SetupResult, write: boolean)
   const yes = await p.confirm({ message: `Open an issue on github.com/${ISSUE_REPO} with this report?`, initialValue: false });
   if (p.isCancel(yes) || !yes) { p.log.info(`Not sent.${file ? ` Report: ${file}` : ""}`); return; }
   if (file && ghReady(ui.ctx.env)) {
-    const r = spawnSync("gh", ["issue", "create", "--repo", ISSUE_REPO, "--title", title, "--body-file", file], { env: ui.ctx.env, encoding: "utf8", timeout: 60_000 });
+    const r = spawnSync("gh", ["issue", "create", "--repo", ISSUE_REPO, "--title", title, "--body-file", file], { env: ui.ctx.env, encoding: "utf8", timeout: 60_000, windowsHide: true });
     if (r.status === 0) { p.log.success(`Issue opened: ${`${r.stdout}`.trim()}`); return; }
     p.log.warn(`gh issue create failed: ${`${r.stderr}`.trim()}`);
   }
@@ -367,20 +367,20 @@ async function upgrade(ui: Ui): Promise<number> {
   }
   const shell = process.platform === "win32";
   progress(ui, `running ${install}`);
-  const r = spawnSync(npm, ["i", "-g", spec], { env: ui.ctx.env, encoding: "utf8", shell });
+  const r = spawnSync(npm, ["i", "-g", spec], { env: ui.ctx.env, encoding: "utf8", shell, windowsHide: true });
   if (r.status !== 0) {
     const why = (`${r.stderr ?? ""}`.trim().split("\n").pop() ?? "") || (r.error?.message ?? "");
     err(`FAIL upgrade: ${install} exited ${r.status ?? "?"}${why ? `: ${why}` : ""}. Fix: ${install}`);
     return EXIT_FAIL;
   }
-  const root = `${spawnSync(npm, ["root", "-g"], { env: ui.ctx.env, encoding: "utf8", shell }).stdout ?? ""}`.trim();
+  const root = `${spawnSync(npm, ["root", "-g"], { env: ui.ctx.env, encoding: "utf8", shell, windowsHide: true }).stdout ?? ""}`.trim();
   const cli = path.join(root, "context-mode", "cli.mjs");
   if (!root || !existsSync(cli)) {
     err(`FAIL upgrade: ${cli} not found after ${install}. Fix: ${install}`);
     return EXIT_FAIL;
   }
   progress(ui, `running context-mode ${repairArgs.join(" ")}`);
-  const c = spawnSync(process.execPath, [cli, ...repairArgs], { env: ui.ctx.env, stdio: "inherit" });
+  const c = spawnSync(process.execPath, [cli, ...repairArgs], { env: ui.ctx.env, stdio: "inherit", windowsHide: true });
   return c.status ?? (c.signal === "SIGINT" ? EXIT_SIGINT : EXIT_FAIL);
 }
 

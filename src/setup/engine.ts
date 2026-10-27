@@ -302,7 +302,7 @@ function mcpCheck(cmd: string[], env: SetupContext["env"]): Promise<Check> {
   return new Promise((resolve) => {
     // Own process group on POSIX: a terminal Ctrl-C then reaches only the CLI, whose SIGINT handler rolls back and
     // exits 130. Otherwise the server dies first and this check reports a FAIL before the handler runs.
-    const child = spawn(cmd[0], cmd.slice(1), { env, stdio: ["pipe", "pipe", "ignore"], detached: process.platform !== "win32" });
+    const child = spawn(cmd[0], cmd.slice(1), { env, stdio: ["pipe", "pipe", "ignore"], detached: process.platform !== "win32", windowsHide: true });
     const reap = (): void => { child.kill(); };
     process.once("exit", reap);
     let buf = "";
@@ -342,13 +342,13 @@ function hookRound(row: CheckRow, env: SetupContext["env"]): Check {
   const bare: number[] = [];
   for (let i = 0; i < HOOK_SAMPLES; i++) { // interleaved so host load hits both series alike (D3)
     let t = performance.now();
-    const r = spawnSync(cmd[0], cmd.slice(1), { env, input, encoding: "utf8", timeout: VERIFY_TIMEOUT_MS });
+    const r = spawnSync(cmd[0], cmd.slice(1), { env, input, encoding: "utf8", timeout: VERIFY_TIMEOUT_MS, windowsHide: true });
     wall.push(performance.now() - t);
     if (r.status !== 0) return { name: "hook", ok: false, detail: `hook exited ${r.status}: ${`${r.stderr}`.trim()}` };
     const out = `${r.stdout}`.trim(); // the golden payload is a harmless shell call: no answer, or one JSON object
     if (out) { let j: unknown; try { j = JSON.parse(out); } catch { /* below */ } if (!isObj(j)) return { name: "hook", ok: false, detail: `hook answer is not a JSON object: ${out.slice(0, 200)}` }; }
     t = performance.now();
-    spawnSync(cmd[0], ["-e", ""], { env, timeout: VERIFY_TIMEOUT_MS });
+    spawnSync(cmd[0], ["-e", ""], { env, timeout: VERIFY_TIMEOUT_MS, windowsHide: true });
     bare.push(performance.now() - t);
   }
   const wallP95Ms = Math.round(p95(wall));
@@ -416,7 +416,7 @@ export function hookRunsCheck(row: CheckRow, env: SetupContext["env"]): Check {
     const sampleEnv: NodeJS.ProcessEnv = { ...env, HOME: home, USERPROFILE: home };
     delete sampleEnv.CLAUDE_PROJECT_DIR; // the sample project is the payload cwd, never the caller's project
     const cmd = row.hookRunCommand;
-    const r = spawnSync(cmd[0], cmd.slice(1), { env: sampleEnv, cwd: proj, input: JSON.stringify(payload), encoding: "utf8", timeout: VERIFY_TIMEOUT_MS });
+    const r = spawnSync(cmd[0], cmd.slice(1), { env: sampleEnv, cwd: proj, input: JSON.stringify(payload), encoding: "utf8", timeout: VERIFY_TIMEOUT_MS, windowsHide: true });
     const bad = sampleVerdict(row.id, effect, text, { status: r.status, stdout: `${r.stdout ?? ""}`, stderr: `${r.stderr ?? ""}` });
     return bad === null ? { name: "hook-runs", ok: true } : { name: "hook-runs", ok: false, detail: bad };
   } finally {
