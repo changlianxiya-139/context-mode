@@ -50,7 +50,7 @@ It puts each touched file back. To remove the package too, see [Uninstall](./REA
 
 ## Known limits
 
-- Setup writes no hook file. VS Code reads hooks from `.github/hooks/` in a project; that is not part of the setup run.
+- Setup writes one hook file: `~/.copilot/hooks/context-mode-vscode.json`, shape `{ version: 1, hooks: { <Event>: [{ type: "command", command, timeout }] } }` with `version: 1`, `type: "command"` and `timeout` 5 (seconds), for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and PreCompact. The command is `"<node>" "<package>/hook.mjs" --agent vscode` (absolute paths). Other entries in that file stay. Setup does not write project hooks under `.github/hooks/`.
 - VS Code itself was not run, so no run showed that VS Code reads `.vscode/mcp.json` under the home folder.
 - The shipped `hooks/vscode.json` is a template: the writer fills the path; do not copy hooks/vscode.json by hand.
 
