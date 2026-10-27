@@ -28,8 +28,8 @@ before(() => {
 });
 after(() => { process.env.HOME = oldHome; rmSync(root, { recursive: true, force: true, maxRetries: 3 }); });
 
-test("kiro: execute_bash is the native shell tool", () => {
-  assert.deepEqual(getAdapter("kiro").nativeTools.shell, ["execute_bash"]);
+test("kiro: execute_bash, execute_pwsh and shell are the native shell tools (D-N7-KIRO-1)", () => {
+  assert.deepEqual(getAdapter("kiro").nativeTools.shell, ["execute_bash", "execute_pwsh", "shell"]);
 });
 
 test("kiro: the hook file registers PreToolUse and PostToolUse for @mcp and for shell", () => {

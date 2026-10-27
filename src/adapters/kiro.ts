@@ -15,13 +15,17 @@ const KIRO_EVENTS: Readonly<Record<string, CanonicalEventName>> = {
   PromptSubmit: "UserPromptSubmit",
   userPromptSubmit: "UserPromptSubmit",
   PreToolUse: "PreToolUse",
+  preToolUse: "PreToolUse",
   PostToolUse: "PostToolUse",
+  postToolUse: "PostToolUse",
 };
 const PROMPT_ENV = "USER_PROMPT"; // impl/10 §8: the prompt is an env var, not a stdin field
 const MCP_PREFIX = "mcp_";
-// Kiro CLI V3 docs (hooks-migration, 2026-10-10): matcher "shell" selects execute_bash; hook input tool_name "execute_bash".
-export const SHELL_TOOL_NAME = "execute_bash";
-const NATIVE_TO_CANONICAL: Readonly<Record<string, string>> = { [SHELL_TOOL_NAME]: "Bash" };
+// D-N7-KIRO-1. Event names: kiro.dev/docs/cli/v3/hooks-migration (2026-10-10), 2.x camelCase -> V3 PascalCase.
+// Shell tool: the registered matcher "shell" is a category tag; kiro.dev/docs/custom-agents/configuration-reference (2026-10-10)
+// lists the built-in ids execute_bash and execute_pwsh, and Kiro CLI 2.34.2 names the tool "shell" (execute_bash is its legacy alias).
+export const SHELL_TOOL_NAMES: readonly string[] = Object.freeze(["execute_bash", "execute_pwsh", "shell"]);
+const NATIVE_TO_CANONICAL: Readonly<Record<string, string>> = Object.fromEntries(SHELL_TOOL_NAMES.map((n) => [n, "Bash"]));
 const MCP_SEP = "_";
 
 type Source = NonNullable<CanonicalHookEvent["source"]>;

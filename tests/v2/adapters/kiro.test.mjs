@@ -138,3 +138,37 @@ test("encode deny exits 2 with the plain-text reason on stderr, rewritten comman
 test("encode replace is a no-op on Kiro (no replace channel, Q24 item 7)", () => {
   for (const e of EVENTS) assert.deepEqual(encode(ev(e), { kind: "replace", output: "x" }), { stdout: "", exitCode: 0 });
 });
+
+// D-N7-KIRO-1: names from Kiro CLI V3 docs. Event names: https://kiro.dev/docs/cli/v3/hooks-migration/ (updated 2026-10-10):
+// 2.x agentSpawn/userPromptSubmit/preToolUse/postToolUse/stop became SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Stop.
+// Tool names: https://kiro.dev/docs/custom-agents/configuration-reference/ (2026-10-10): built-in ids execute_bash, execute_pwsh;
+// category tag "shell" (the registered matcher) selects them. Kiro CLI 2.34.2 (kiro-cli-chat strings) lists the tool as "shell",
+// "Also known as execute_bash (legacy alias)". Every name the "shell" matcher can deliver must decode as the shell tool.
+test("[D-N7-KIRO-1] documented camelCase events decode: preToolUse, postToolUse (and agentSpawn, userPromptSubmit)", () => {
+  const pre = decode({ ...base, hook_event_name: "preToolUse", tool_name: "execute_bash", tool_input: { command: "cat x" } });
+  assert.equal(pre.event, "PreToolUse");
+  assert.equal(pre.tool.canonicalName, "Bash");
+  const post = decode({ ...base, hook_event_name: "postToolUse", tool_name: "execute_bash", tool_input: {}, tool_response: "out" });
+  assert.equal(post.event, "PostToolUse");
+  assert.equal(post.result.text, "out");
+  assert.equal(decode({ ...base, hook_event_name: "agentSpawn" }).event, "SessionStart");
+});
+
+test("[D-N7-KIRO-1] every tool the registered shell matcher selects decodes as the shell tool", () => {
+  for (const name of ["execute_bash", "execute_pwsh", "shell"]) {
+    const ev = decode({ ...base, hook_event_name: "PreToolUse", tool_name: name, tool_input: { command: "ls" } });
+    assert.equal(ev.tool.canonicalName, "Bash", name);
+  }
+  assert.equal(decode({ ...base, hook_event_name: "PreToolUse", tool_name: "fs_read", tool_input: {} }).tool.canonicalName, "fs_read");
+});
+
+test("[D-N7-KIRO-1] an undocumented event name still throws", () => {
+  assert.throws(() => decode({ ...base, hook_event_name: "pretooluse" }), /kiro: unknown hook event pretooluse/);
+});
+
+test("[D-N7-KIRO-1] the table's shell names are exactly the ones the decoder maps to Bash", async () => {
+  const { getAdapter } = await import("../../../src/adapters/table.ts");
+  for (const name of getAdapter("kiro").nativeTools.shell) {
+    assert.equal(decode({ ...base, hook_event_name: "PreToolUse", tool_name: name, tool_input: {} }).tool.canonicalName, "Bash", name);
+  }
+});

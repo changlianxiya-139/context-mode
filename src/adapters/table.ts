@@ -78,7 +78,7 @@ export const ADAPTERS: readonly AdapterRow[] = Object.freeze([
   },
   {
     id: "kiro", installMode: "mcp-entry", projectSource: "arg:--agent+cwd", toolNamePrefix: kiro.TOOL_NAME_PREFIX,
-    nativeTools: { shell: [kiro.SHELL_TOOL_NAME] }, execReadOnlyHint: false, // D-HF-KIRO-SHELL-1
+    nativeTools: { shell: [...kiro.SHELL_TOOL_NAMES] }, execReadOnlyHint: false, // D-HF-KIRO-SHELL-1, D-N7-KIRO-1
     eventMap: { SessionStart: "SessionStart", UserPromptSubmit: "UserPromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse" },
     compactDelivery: "none", compactSummary: "none", hookTimeoutMs: HOOK_TIMEOUT_MS, denyChannel: "hint-only",
     hookChannel: { kind: "home-file", path: ".kiro/hooks/context-mode.json" }, skillChannel: { kind: "home-dir", path: ".kiro/skills" }, // ADR-0020

@@ -41,7 +41,7 @@ const NATIVE = {
   qwen: { shell: ["run_shell_command", "Shell"], read: ["read_file"], grep: ["grep_search"], webfetch: ["web_fetch"] },
   "copilot-cli": { shell: ["bash"] }, // D-HA-COPILOT-NAMES-1
   vscode: { shell: ["run_in_terminal"] }, // D-HF-VSCODE-PROJECT-1
-  kiro: { shell: ["execute_bash"] }, // D-HF-KIRO-SHELL-1
+  kiro: { shell: ["execute_bash", "execute_pwsh", "shell"] }, // D-HF-KIRO-SHELL-1, D-N7-KIRO-1
   zcode: CLAUDE_NATIVE,
   pi: { shell: ["bash"], read: ["read"] }, // D-HA-PI-NAMES-1
   opencode: { shell: ["bash"] }, // D-HF-OPENCODE-SHELL-1
