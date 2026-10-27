@@ -65,3 +65,25 @@ test("D-HW-PS-1: Windows PowerShell runs the powershell field and rejects the ba
     assert.equal(good.stdout.trim(), "ran:--agent copilot-cli");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// W-CODEX-5: Codex (codex-rs/hooks/src/engine/command_runner.rs build_command) runs a hook as
+// `%COMSPEC% /C` (fallback cmd.exe) with raw_arg(`"<command_line>"`), never PowerShell. cmd.exe /C drops the outer
+// pair of quotes when the line has more than two quotes, so the quoted node path is valid. This test calls cmd.exe the
+// same way (verbatim arguments) with a path that has a space, so a change of the codex command form that cmd.exe
+// cannot run goes red.
+test("W-CODEX-5: the codex hook command runs through cmd.exe /C with the outer quotes Codex adds", { skip: process.platform !== "win32" }, () => {
+  const root = mkdtempSync(path.join(tmpdir(), "cm cx "));
+  try {
+    const dir = path.join(root, "pkg dir");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "hook.mjs"), "process.stdout.write('ran:' + process.argv.slice(2).join(' '));\n");
+    const reg = buildRegistry({ home: root, pkgDir: dir, env: {} });
+    const row = reg.find((r) => r.id === "codex");
+    const entry = hookEntries(row)[0];
+    assert.equal(entry.command, hookCommandString(row));
+    assert.equal(entry.powershell, undefined, "codex has no powershell channel");
+    const run = spawnSync(process.env.COMSPEC || "cmd.exe", ["/C", `"${entry.command}"`], { encoding: "utf8", windowsHide: true, windowsVerbatimArguments: true });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout.trim(), "ran:--agent codex");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
