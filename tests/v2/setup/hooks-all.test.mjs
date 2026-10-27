@@ -280,3 +280,19 @@ test("[D-N5-CODEX-HOME-1] setup writes codex config.toml, hooks.json and skills 
   for (const name of SKILLS) assert.ok(existsSync(path.join(codexHome, "skills", name, "SKILL.md")), name + " under CODEX_HOME/skills");
   assert.equal(existsSync(path.join(s.home, ".codex")), false, "nothing written to HOME/.codex");
 });
+
+// N6 (2.0.0-next.5 live run): Codex 0.156.1 deferred our MCP tools behind tool_search, so the model dumped the
+// tool catalogue (10,730 B) before it called ctx_execute. Codex's per-server key omit_tools_from = ["deferred"]
+// takes the deferred surface away, so the tools are direct (codex-rs core/src/tools/spec_plan.rs
+// apply_mcp_tool_exposure_policy; config/src/mcp_types.rs omit_tools_from; `codex mcp list` rejects other values).
+test("[D-N6-CODEX-DIRECT-1] setup writes omit_tools_from = [\"deferred\"] in the codex MCP entry", async (t) => {
+  const { parseHostConfig, hostConfigValueAt } = await import("../../../src/core/ops/host-config.ts");
+  const s = sandbox(t);
+  const codexHome = path.join(s.root, "codex-home");
+  const env = { ...s.env, CODEX_HOME: codexHome };
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env, agents: ["codex"], runId: "cd" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  const file = path.join(codexHome, "config.toml");
+  const toml = parseHostConfig("codex", file, readFileSync(file, "utf8"), "toml");
+  assert.deepEqual(hostConfigValueAt(toml, ["mcp_servers", "context-mode", "omit_tools_from"]), ["deferred"]);
+});

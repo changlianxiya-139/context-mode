@@ -633,8 +633,12 @@ export interface OwnMcpEntry {
   fields?: Readonly<Record<string, unknown>>; also?: readonly (readonly [readonly string[], unknown])[];
 }
 export const ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"] as const);
+// D-N6-CODEX-DIRECT-1: Codex defers MCP tools behind tool_search; omit_tools_from = ["deferred"] (codex-rs
+// config/src/mcp_types.rs, core/src/tools/spec_plan.rs apply_mcp_tool_exposure_policy) makes them direct tools.
+export const CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
+export const CODEX_OMIT_DEFERRED: readonly string[] = Object.freeze(["deferred"]);
 export const OWN_MCP_ENTRY: Readonly<Partial<Record<AgentId, OwnMcpEntry>>> = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY] },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
