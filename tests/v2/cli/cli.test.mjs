@@ -251,6 +251,19 @@ test("[WIN] cli/home-rule: HOME and USERPROFILE differ (Git Bash, MSYS): win32 p
   assert.ok(!r.stdout.includes(other), `plan must not touch the other home ${other}`);
 });
 
+test("[WIN] cli/home-rule: zcode plans config.json and skills under the os.homedir() home when HOME and USERPROFILE differ (Z-WIN-6, D-WIN-ZCODE-HOME-1)", (t) => {
+  // ZCode CLI (zai-org/ZCode 3c5b2276): resolvePath("~/.zcode/cli") = join(homedir(), ...), skills roots = join(homedir(), ".zcode", "skills"); no HOME read.
+  const s = sandbox(t);
+  const other = path.join(s.root, "msys-home");
+  mkdirSync(other, { recursive: true });
+  const win = process.platform === "win32";
+  const env = { ...s.env, HOME: win ? other : s.home, USERPROFILE: win ? s.home : other };
+  const r = spawnSync(process.execPath, [path.join(s.pkg, "cli.mjs"), "setup", "--dry-run", "--agents", "zcode"], { encoding: "utf8", timeout: 60_000, env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes(path.join(s.home, ".zcode", "cli", "config.json")), `plan must edit ${s.home}/.zcode/cli/config.json, got:\n${r.stdout}`);
+  assert.ok(!r.stdout.includes(other), `plan must not touch the other home ${other}`);
+});
+
 test("[M7] cli/dry-run: setup --dry-run shows the plan and writes nothing", (t) => {
   const s = sandbox(t);
   codexHome(s);

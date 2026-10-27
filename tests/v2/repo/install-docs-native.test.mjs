@@ -96,3 +96,11 @@ test("install-native: 4 GitHub-source pages say Testing v2 (next) with the relea
     for (const r of rest) assert.ok(testing.includes(r) && after.includes(r), `${id}.md lacks ${r}`);
   }
 });
+
+// Z-WIN-6, D-WIN-ZCODE-HOME-1: ZCode has no Windows page of its own; the install page must say where the files go on Windows.
+test("install-native: the zcode page names the Windows config.json and skills paths and the home rule", () => {
+  const text = read("docs", "install", "zcode.md");
+  assert.ok(text.includes("%USERPROFILE%\\.zcode\\cli\\config.json"), "zcode.md lacks the Windows config.json path");
+  assert.ok(text.includes("%USERPROFILE%\\.zcode\\skills"), "zcode.md lacks the Windows skills path");
+  assert.ok(/ignores `?HOME`?/.test(text), "zcode.md must say ZCode ignores HOME on Windows");
+});

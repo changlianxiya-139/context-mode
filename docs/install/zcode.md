@@ -21,6 +21,8 @@ With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agen
 
 Restart ZCode after setup.
 
+On Windows the files are `%USERPROFILE%\.zcode\cli\config.json` and `%USERPROFILE%\.zcode\skills`. ZCode takes its home from the OS profile dir and ignores `HOME`, so setup does the same: Git Bash or MSYS with another `HOME` changes nothing. ZCode source read (zai-org/ZCode `3c5b2276`, 2026-10-20), not run on Windows.
+
 To do the setup step by hand, run `context-mode setup --print zcode` and follow what it prints.
 
 ## What setup changes
