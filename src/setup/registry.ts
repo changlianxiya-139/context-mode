@@ -245,7 +245,7 @@ function hookInstallFor(ctx: SetupContext, row: AdapterRow, command: string): Ho
   }
   if (row.id === "opencode") {
     return { kind: "plugin-list", file: path.join(opencodeDirOf(ctx.env, ctx.home), OPENCODE_BASE_CONFIG_FILE), key: ["plugin"],
-      entry: path.join(ctx.pkgDir, ...OPENCODE_PLUGIN) }; // OpenCode reads an absolute path as is (binary 1.x resolver)
+      entry: path.join(ctx.pkgDir, ...OPENCODE_PLUGIN) }; // OpenCode 1.19.4 turns an absolute or drive-letter path into a file URL itself (D-WIN-OCENTRY-1)
   }
   return { kind: "package", via: ch.path };
 }

@@ -73,4 +73,6 @@ Tested on macOS (arm64), Node 26, a clean temporary HOME, the npm-packed build o
 | `context-mode doctor --agents opencode` | 1.19.4 | 2026-10-23 | Pass |
 | `context-mode setup --remove --yes` | 1.19.4 | 2026-10-23 | Pass: files restored (`Restored N file(s).`) |
 
+Read, not run: the 1.19.4 plugin resolver treats a `file://` value, an absolute path and a drive-letter path (`C:\\` or `C:/`) as a file entry and converts it with `pathToFileURL`, so setup writes the bare absolute path on Windows too (D-WIN-OCENTRY-1). On macOS a path with spaces showed as `file:///.../home%20dir/...` in `opencode debug config`.
+
 Not run: a live, logged-in OpenCode session that fires the hooks. Windows commands. Evidence: [CLI report](../v2/CLI-REPORT.md), [engine tests](../../tests/v2/setup/engine.test.mjs), [DEVIATIONS](../v2/impl/DEVIATIONS.md).
