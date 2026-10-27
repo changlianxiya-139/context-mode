@@ -178,3 +178,12 @@ test("[VT-WIN] Windows only: ctx_execute shell and ctx_batch run through Git Bas
     assert.ok(b.text.includes("hi-batch"));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("[W-CODEX-6] findRuntime on Windows: a PATH entry wrapped in double quotes is found (fake win32 on any OS)", async () => {
+  const l = layout();
+  try {
+    const quoted = [`"${l.apps}"`, `"${join(l.git, "cmd")}"`].join(sep);
+    assert.equal(await asWindows({ PATH: quoted, PATHEXT }, () => findRuntime("shell")), l.bash, "shell: git.exe in a quoted entry");
+    assert.equal(await asWindows({ PATH: `"${join(l.git, "bin")}"`, PATHEXT: ".exe;.cmd" }, () => findRuntime("git")), join(l.git, "bin", "git.exe"), "any runtime in a quoted entry");
+  } finally { rmSync(l.top, { recursive: true, force: true }); }
+});

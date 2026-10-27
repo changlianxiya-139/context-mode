@@ -1,7 +1,10 @@
 // src/setup/spawn-bin.ts: find an agent CLI on PATH and the spawn form that runs it, shared by setup and
-// scripts/release/smoke.mjs (D-RN-WIN-1). No other imports, so a release script can load it alone.
+// scripts/release/smoke.mjs (D-RN-WIN-1). Its only import besides node: is path-entries.ts, which has none, so a release script can load it alone.
 import { accessSync, constants as fsc, statSync } from "node:fs";
 import path from "node:path";
+import { pathEntries } from "../core/sandbox/path-entries.ts";
+
+export { pathEntries };
 
 type Env = Record<string, string | undefined>;
 const WIN_EXT = ".COM;.EXE;.BAT;.CMD";
@@ -11,14 +14,6 @@ const DEFAULT_COMSPEC = "cmd.exe";
 /** Env value by key, matched without case (Windows spells PATH as `Path`, ComSpec as `COMSPEC`). */
 function envGet(env: Env, k: string): string | undefined {
   return env[Object.keys(env).find((x) => x.toUpperCase() === k) ?? k];
-}
-
-/** The directories of a PATH value. On Windows an entry may be wrapped in one pair of double quotes (cmd.exe accepts
- *  it, and `path.join` would keep the quotes), so one surrounding pair is cut off with slice; an entry that is empty
- *  after that is dropped. An unpaired quote stays as is. POSIX entries are used as they are. */
-export function pathEntries(value: string, platform: NodeJS.Platform = process.platform): string[] {
-  const win = platform === "win32";
-  return value.split(win ? ";" : ":").map((e) => (win && e.length >= 2 && e.startsWith('"') && e.endsWith('"') ? e.slice(1, -1) : e)).filter(Boolean);
 }
 
 /** PATH lookup the way the host shell does it. On Windows, npm installs an agent CLI as `<bin>.cmd` (next to an
