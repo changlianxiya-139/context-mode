@@ -14,7 +14,7 @@ import {
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow, CtxUpgradeInput, ProjectContext, ToolContext, ToolReply, UpgradeChangeRow } from "../contracts/types.ts";
 import { getAdapter } from "../../adapters/table.ts";
-import { claudeDirOf, homeDirOf } from "../project/config-dir.ts";
+import { claudeDirOf, requireHomeDir } from "../project/config-dir.ts";
 import { detectV1 } from "../ops/detect-v1.ts";
 import { regenerateHostConfig, type HostFileWriter } from "../ops/host-write.ts";
 import { resolvePluginRoot } from "../ops/plugin-root.ts";
@@ -44,12 +44,6 @@ export interface UpgradeDeps {
 
 function row(area: string, before: string, after: string): UpgradeChangeRow {
   return { area, before, after };
-}
-
-function homeOf(env: NodeJS.ProcessEnv): string {
-  const home = homeDirOf(env);
-  if (home === null) throw new CtxError("NO_HOME", { name: process.platform === "win32" ? "USERPROFILE" : "HOME" });
-  return home;
 }
 
 // The running server bundle's dir: the same anchor host-config.ts uses for the MCP entry (D-M3-arch-3).
@@ -134,7 +128,7 @@ function renderTable(rows: readonly UpgradeChangeRow[]): string {
 /** impl/07 §6 steps 1-8 and Uninstall steps 1-6, with the process inputs passed in (D-M5-U8-1). */
 export async function runUpgrade(input: CtxUpgradeInput, deps: UpgradeDeps): Promise<ToolReply> {
   const adapter = getAdapter(deps.project.agent);
-  const home = homeOf(deps.env);
+  const home = requireHomeDir(deps.env);
   const rows = pluginRootRow(adapter, deps.env);
   if ((input.mode ?? UPGRADE_DEFAULT_MODE) === "uninstall") {
     const result = runUninstall({ adapter, project: deps.project, env: deps.env, confirmDelete: input.confirmDelete === true });

@@ -37,15 +37,17 @@ export function claudeDirOf(env: NodeJS.ProcessEnv, home: string): string {
   return dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR["claude-code"]);
 }
 
-function homeOf(env: NodeJS.ProcessEnv): string {
-  const home = homeDirOf(env);
+/** The one "home or fail" helper (D-WIN-HOME-3): setup, doctor, upgrade, uninstall, plugin-root and the store all call this.
+ *  The NO_HOME error names the var the platform rule reads first: USERPROFILE on win32, HOME elsewhere. */
+export function requireHomeDir(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string {
+  const home = homeDirOf(env, platform);
   if (home !== null) return home;
-  throw new CtxError("NO_HOME", { name: process.platform === "win32" ? "USERPROFILE" : "HOME" });
+  throw new CtxError("NO_HOME", { name: platform === "win32" ? "USERPROFILE" : "HOME" });
 }
 
 /** impl/02 §4 steps 1-4: expand DATA_ROOT ("~/.context-mode"), create it if absent, return its realpath. */
 export function resolveConfigDir(env: NodeJS.ProcessEnv): string {
-  const dir = join(homeOf(env), DATA_ROOT.slice(1)); // DATA_ROOT is "~" + "/.context-mode"; join drops the lead "/"
+  const dir = join(requireHomeDir(env), DATA_ROOT.slice(1)); // DATA_ROOT is "~" + "/.context-mode"; join drops the lead "/"
   mkdirSync(dir, { recursive: true });
   return realpathSync.native(dir); // same canonical form as resolve.ts and contain.ts (review-M1 #1)
 }

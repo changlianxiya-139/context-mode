@@ -43,3 +43,17 @@ test("[WIN] home-dir: resolveConfigDir on the live platform uses the same rule (
     rmSync(b, { recursive: true, force: true });
   }
 });
+
+test("[WIN] home-dir: requireHomeDir names USERPROFILE on win32 and HOME on POSIX when nothing is set (Q-WIN-3)", async () => {
+  const { requireHomeDir } = await import("../../../src/core/project/config-dir.ts");
+  assert.throws(() => requireHomeDir({}, "win32"), (e) => e.code === "NO_HOME" && /USERPROFILE/.test(e.message));
+  assert.throws(() => requireHomeDir({}, "linux"), (e) => e.code === "NO_HOME" && /\bHOME\b/.test(e.message) && !/USERPROFILE/.test(e.message));
+  assert.equal(requireHomeDir({ HOME: "/h" }, "linux"), "/h");
+});
+
+test("[WIN] home-dir: qwen under Git Bash HOME resolves to USERPROFILE\\.qwen (Q-WIN-3)", async () => {
+  const { AGENT_HOME_DIR } = await import("../../../src/core/contracts/constants.ts");
+  const { win32 } = await import("node:path");
+  const home = homeDirOf({ HOME: "C:\\msys\\home\\u", USERPROFILE: "C:\\Users\\u" }, "win32");
+  assert.equal(win32.join(home, ...AGENT_HOME_DIR.qwen), "C:\\Users\\u\\.qwen");
+});

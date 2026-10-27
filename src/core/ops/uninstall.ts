@@ -14,7 +14,7 @@ import {
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow, AgentId, ProjectContext, UpgradeChangeRow } from "../contracts/types.ts";
 import { isInside } from "../project/contain.ts";
-import { homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
+import { requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { listLiveOwners } from "../store/owners.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig, writeHostConfigEdit } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -32,12 +32,6 @@ export interface UninstallResult {
 
 function row(area: string, before: string, after: string): UpgradeChangeRow {
   return { area, before, after };
-}
-
-function homeOf(env: NodeJS.ProcessEnv): string {
-  const home = homeDirOf(env);
-  if (home === null) throw new CtxError("NO_HOME", { name: process.platform === "win32" ? "USERPROFILE" : "HOME" });
-  return home;
 }
 
 // ------------------------------------------------------------------------------------------ 1. stop
@@ -112,7 +106,7 @@ function piSource(entry: unknown): unknown {
 // The own entries a host config file holds per agent: the same set mergeOwnEntries regenerates (D-M5-O1-4),
 // here dropped (D-M5-U7-1). Agents with none (marketplace, extension, plugin hosts) get an empty list.
 function ownEntries(agent: AgentId, env: NodeJS.ProcessEnv): OwnEntry[] {
-  const home = homeOf(env);
+  const home = requireHomeDir(env);
   const mcp = OWN_MCP_ENTRY[agent];
   if (mcp !== undefined) {
     // The own entry sits at key = [top, ...inner, own] (zcode: mcp.servers.context-mode, D-HF-ZCODE-SHAPE-1).

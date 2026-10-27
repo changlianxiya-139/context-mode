@@ -9,16 +9,10 @@ import {
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow } from "../contracts/types.ts";
-import { claudeDirOf, homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
+import { claudeDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig } from "./host-config.ts";
 
 type RootInput = Pick<AdapterRow, "id" | "installMode">;
-
-function homeOf(env: NodeJS.ProcessEnv): string {
-  const home = homeDirOf(env);
-  if (home === null) throw new CtxError("NO_HOME", { name: process.platform === "win32" ? "USERPROFILE" : "HOME" });
-  return home;
-}
 
 function missing(agent: string, path: string): CtxError {
   return new CtxError("PLUGIN_ROOT_MISSING", { agent, path });
@@ -27,7 +21,7 @@ function missing(agent: string, path: string): CtxError {
 // marketplace: ~/.claude/plugins/cache/<marketplace>/context-mode. The marketplace segment is the one cache
 // child that holds a context-mode dir; none or more than one is PLUGIN_ROOT_MISSING (D-M5-O1-1).
 function marketplaceRoot(adapter: RootInput, env: NodeJS.ProcessEnv): string {
-  const cache = join(claudeDirOf(env, homeOf(env)), HOST_PLUGINS_DIR_NAME, PLUGIN_CACHE_DIR_NAME);
+  const cache = join(claudeDirOf(env, requireHomeDir(env)), HOST_PLUGINS_DIR_NAME, PLUGIN_CACHE_DIR_NAME);
   const pattern = join(cache, "*", PLUGIN_NAME);
   if (!existsSync(cache)) throw missing(adapter.id, pattern);
   const found = readdirSync(cache)
@@ -42,7 +36,7 @@ function marketplaceRoot(adapter: RootInput, env: NodeJS.ProcessEnv): string {
 function configEntryRoot(adapter: RootInput, env: NodeJS.ProcessEnv): string {
   const spec = OWN_MCP_ENTRY[adapter.id];
   if (spec === undefined) throw missing(adapter.id, SERVER_KEY);
-  const file = join(homeOf(env), ...spec.file);
+  const file = join(requireHomeDir(env), ...spec.file);
   if (!existsSync(file)) throw missing(adapter.id, file);
   const current = readHostConfig(adapter.id, file);
   const value = parseHostConfig(adapter.id, file, current.text, current.format);
@@ -61,7 +55,7 @@ function candidate(adapter: RootInput, env: NodeJS.ProcessEnv): string {
     case "hooks+mcp":
       return configEntryRoot(adapter, env);
     case "extension":
-      return join(homeOf(env), ...AGENT_HOME_DIR[adapter.id], EXTENSIONS_DIR_NAME, PLUGIN_NAME);
+      return join(requireHomeDir(env), ...AGENT_HOME_DIR[adapter.id], EXTENSIONS_DIR_NAME, PLUGIN_NAME);
     case "plugin":
       return join(resolveConfigDir(env), DATA_PLUGINS_DIR_NAME, adapter.id, PLUGIN_CURRENT_LINK);
     case "in-process":

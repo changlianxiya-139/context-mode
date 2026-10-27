@@ -20,7 +20,7 @@ import { checkMcp, checkMode, checkNode, checkProject, checkShell, checkVersion 
 import { checkHookRoundTrip } from "../ops/doctor-hook.ts";
 import { healD8 } from "../ops/db-heal.ts";
 import { buildReport } from "../ops/report.ts";
-import { claudeDirOf, codexDirOf, homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
+import { claudeDirOf, codexDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
 import { closeDb, openDb } from "../store/db.ts";
 
@@ -50,12 +50,6 @@ async function guard(id: DoctorCheckId, run: () => DoctorRow | Promise<DoctorRow
   }
 }
 
-function needHome(env: NodeJS.ProcessEnv): string {
-  const home = homeDirOf(env);
-  if (home === null) throw new CtxError("NO_HOME", { name: "HOME" });
-  return home;
-}
-
 // D5 Codex trust sub-case reads the journal; doctor never creates context.db, so no file means no handle.
 async function codexDb(ctx: ToolContext, adapter: AdapterRow): Promise<DbHandle | null> {
   if (adapter.id !== "codex" || !existsSync(ctx.project.dbPath)) return null;
@@ -74,7 +68,7 @@ async function hookRow(ctx: ToolContext, adapter: AdapterRow, host: DoctorHost):
       bundleDir: host.bundleDir,
       env: buildChildEnv(host.env),
       signal: ctx.signal,
-      codexConfigDir: codexDirOf(host.env, needHome(host.env)), // same Codex dir D3 reads (D-N6-CODEX-HOME-2)
+      codexConfigDir: codexDirOf(host.env, requireHomeDir(host.env)), // same Codex dir D3 reads (D-N6-CODEX-HOME-2)
       db,
     });
   } finally {
@@ -102,7 +96,7 @@ export async function runDoctorChecks(ctx: ToolContext, adapter: AdapterRow, hos
     D1: () => checkVersion({ bundleSha: BUNDLE_SHA, env: buildChildEnv(env), cwd: project.worktree, signal: ctx.signal }),
     D2: () => checkNode({ nodeVersion: process.version, bunVersion: process.versions.bun }),
     D3: () => checkHostConfig(adapter, env, project.worktree),
-    D4: () => checkV1Leftovers(adapter.id, needHome(env), { project: project.worktree, piAgentDir: env[PI_AGENT_DIR_ENV], claudeDir: claudeDirOf(env, needHome(env)) }),
+    D4: () => checkV1Leftovers(adapter.id, requireHomeDir(env), { project: project.worktree, piAgentDir: env[PI_AGENT_DIR_ENV], claudeDir: claudeDirOf(env, requireHomeDir(env)) }),
     D5: () => hookRow(ctx, adapter, host),
     D5b: () => checkDoubleFire(adapter.id, project.worktree),
     D6: () => checkMcp(ctx),
