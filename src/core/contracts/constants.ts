@@ -476,7 +476,7 @@ export const HOOK_HOST_FILE: Readonly<Record<AgentId, {
   gemini: { root: "plugin", file: ["hooks", "hooks.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: false },
   qwen: { root: "plugin", file: ["hooks", "qwen.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
   "copilot-cli": { root: "home", file: [".copilot", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeoutSec", matcher: false },
-  vscode: { root: "project", file: [".github", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeout", matcher: false },
+  vscode: { root: "home", file: [".copilot", "hooks", "context-mode-vscode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeout", matcher: false },
   kiro: { root: "home", file: [".kiro", "hooks", "context-mode.json"], key: ["hooks"], shape: "kiro", timeoutKey: "timeout", matcher: false },
   zcode: { root: "home", file: [".zcode", "cli", "config.json"], key: ["hooks", "events"], shape: "zcode", timeoutKey: "timeoutMs", matcher: true },
   pi: null,
@@ -569,7 +569,7 @@ export const XDG_CONFIG_HOME_ENV = "XDG_CONFIG_HOME"; // D-WIN-OPENCODE-DIR-1: O
 export const CONFIG_TOML_FILE = "config.toml"; // codex
 export const CONFIG_JSON_FILE = "config.json"; // zcode cli/
 export const ZCODE_CLI_DIR = "cli";
-export const OWN_HOOK_FILE = "context-mode.json"; // copilot-cli ~/.copilot/hooks/, vscode <project>/.github/hooks/
+export const OWN_HOOK_FILE = "context-mode.json"; // copilot-cli ~/.copilot/hooks/ (vscode: context-mode-vscode.json, same dir)
 export const GITHUB_DIR_NAME = ".github";
 export const VSCODE_DIR_NAME = ".vscode";
 export const VSCODE_MCP_FILE = "mcp.json";
