@@ -6,6 +6,7 @@
 // Windows paths and fails if the entry stops being a plain absolute path under the package dir.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 
 import { buildRegistry } from "../../../src/setup/index.ts";
 
@@ -31,6 +32,6 @@ test("OC-WIN-4: the opencode plugin entry is a bare drive-letter path OpenCode's
 test("OC-WIN-4: a POSIX package dir with a space stays a bare absolute path", () => {
   const pkg = "/Users/jane doe/.npm-global/lib/node_modules/context-mode";
   const row = buildRegistry({ home: "/Users/jane doe", pkgDir: pkg, env: {} }).find((r) => r.id === "opencode");
-  assert.ok(row.hookInstall.entry.startsWith("/Users/jane doe/"), row.hookInstall.entry);
+  assert.equal(row.hookInstall.entry, path.join(pkg, "opencode", "plugin.js"));
   assert.ok(!row.hookInstall.entry.startsWith("file:"));
 });
