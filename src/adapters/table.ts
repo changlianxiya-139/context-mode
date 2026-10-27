@@ -73,7 +73,7 @@ export const ADAPTERS: readonly AdapterRow[] = Object.freeze([
     // PreCompact sets the pending flag (ADR-0009 §6, DEVIATIONS D-M3-A4-1).
     nativeTools: { shell: [vscode.SHELL_TOOL_NAME] }, execReadOnlyHint: false, eventMap: { ...CLAUDE_EVENTS, PreCompact: "PreCompact" },
     compactDelivery: "pending-flag", compactSummary: "none", hookTimeoutMs: HOOK_TIMEOUT_MS, denyChannel: "deny-reason",
-    hookChannel: { kind: "home-file", path: ".copilot/hooks/context-mode-vscode.json" }, skillChannel: { kind: "home-dir", path: ".copilot/skills" }, // ADR-0020
+    hookChannel: { kind: "home-file", path: ".copilot/hooks/context-mode-vscode.json" }, skillChannel: { kind: "home-dir", path: ".agents/skills" }, // ADR-0020, D-HQ-COPILOT-NAMES-3: Copilot CLI owns ~/.copilot/skills
     decode: vscode.decode, encode: vscode.encode,
   },
   {

@@ -215,7 +215,7 @@ const SKILL_CHANNEL = {
   gemini: { kind: "package", path: "skills" },
   qwen: { kind: "package", path: "skills" }, // D-HQ-SKILLS-3: <extension>/skills, shared with gemini
   "copilot-cli": { kind: "home-dir", path: ".copilot/skills" },
-  vscode: { kind: "home-dir", path: ".copilot/skills" },
+  vscode: { kind: "home-dir", path: ".agents/skills" }, // D-HQ-COPILOT-NAMES-3
   kiro: { kind: "home-dir", path: ".kiro/skills" },
   zcode: { kind: "home-dir", path: ".zcode/skills" },
   pi: { kind: "package", path: "pi/skills" },

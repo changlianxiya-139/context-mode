@@ -27,7 +27,7 @@ To do the setup step by hand, run `context-mode setup --print vscode` and follow
 
 - Adds the `context-mode` entry (key `servers`) to `~/.vscode/mcp.json`. Other servers stay.
 - Writes the hooks to `~/.copilot/hooks/context-mode-vscode.json` (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact).
-- Writes the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` to `~/.copilot/skills/<name>/SKILL.md` (one file set, shared with Copilot CLI).
+- Writes the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` to `~/.agents/skills/<name>/SKILL.md` (Copilot CLI keeps its own set in `~/.copilot/skills`, with its own tool name).
 - Effect: a large shell or read call is denied, and the reason names `ctx_execute` (deny + redirect).
 - Backs up each file first. A failed step is rolled back byte for byte.
 - Never edits `CLAUDE.md`, `AGENTS.md` or other instruction files.

@@ -247,18 +247,23 @@ test("ADR-0020: codex doctor fails hook-registered when a trusted_hash does not 
   assert.match(reg.detail, /not trusted/);
 });
 
-// Copilot CLI 1.0.103 and VS Code both read ~/.copilot/skills (bundle help text: "Personal: ~/.copilot/skills/"),
-// and their own tool names differ (context-mode-ctx_* vs mcp_context-mode_ctx_*). One shared SKILL.md names both,
-// so the second agent's setup never rewrites the first agent's skill (D-HQ-COPILOT-NAMES-2).
-test("D-HQ-COPILOT-NAMES-2: copilot-cli and vscode share ~/.copilot/skills; each SKILL.md names both hosts' tools; doctor passes skills for both", async (t) => {
+// D-HQ-COPILOT-NAMES-3: Copilot CLI 1.0.103 lists personal skills from ~/.copilot/skills before ~/.agents/skills and skips a
+// later same-name skill, and its tool names differ from VS Code's (context-mode-ctx_* vs mcp_context-mode_ctx_*). So
+// copilot-cli owns ~/.copilot/skills and vscode owns ~/.agents/skills; each SKILL.md names one host's tool, and setup of one
+// agent never rewrites the other's skill. Supersedes the shared-dir form of D-HQ-COPILOT-NAMES-2.
+test("D-HQ-COPILOT-NAMES-3: copilot-cli and vscode each own a skills dir; each SKILL.md names only its host's tool; doctor passes skills for both", async (t) => {
   const s = sandbox(t);
   const { runDoctor } = await import("../../../src/setup/index.ts");
+  const dirs = { "copilot-cli": ".copilot", vscode: ".agents" };
   for (const agents of [["copilot-cli"], ["vscode"], ["copilot-cli", "vscode"]]) {
     await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents, runId: "r-" + agents.join("-") });
-    for (const name of SKILLS) {
-      const text = readFileSync(path.join(s.home, ".copilot", "skills", name, "SKILL.md"), "utf8");
+    for (const id of agents) for (const name of SKILLS) {
+      const text = readFileSync(path.join(s.home, dirs[id], "skills", name, "SKILL.md"), "utf8");
       const tool = name.replace("ctx-", "ctx_");
-      for (const id of ["copilot-cli", "vscode"]) assert.ok(text.includes(getAdapter(id).toolNamePrefix + tool), agents + " " + name + " names " + id);
+      const other = getAdapter(id === "vscode" ? "copilot-cli" : "vscode").toolNamePrefix;
+      assert.ok(text.includes("Call the " + getAdapter(id).toolNamePrefix + tool + " tool "), id + " " + name + " names its own tool: " + text);
+      assert.equal(text.includes(" or "), false, id + " " + name + " hedges: " + text);
+      assert.equal(text.includes(other + tool), false, id + " " + name + " names the other host's tool");
     }
   }
   const d = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["copilot-cli", "vscode"] });

@@ -102,7 +102,7 @@ Every agent gets hooks and the skills `/ctx-doctor`, `/ctx-stats`, `/ctx-upgrade
 | Gemini CLI | extension `hooks/hooks.json` | extension `skills/` | R | pass: 168,875 -> 343 | 2026-10-26 | 0.65.0 | partly: AfterTool deny text names `ctx_search`, host name is `mcp_context-mode_ctx_search` |
 | Qwen Code | extension `hooks/qwen.json` | extension `skills/` | D | pass: 212,544 -> 332 | 2026-10-26 | 0.26.1 | partly: no headless hook list |
 | Copilot CLI | `~/.copilot/hooks/context-mode.json` | `~/.copilot/skills` | R | pass: 203,669 -> 384 | 2026-10-26 | 1.0.103 | partly: MCP tool-name prefix not checked |
-| VS Code (Copilot) | `~/.copilot/hooks/context-mode-vscode.json` | `~/.copilot/skills` | D | pass: 204,513 -> 560 | 2026-10-26 | not run | partly: no loader run |
+| VS Code (Copilot) | `~/.copilot/hooks/context-mode-vscode.json` | `~/.agents/skills` | D | pass: 204,513 -> 560 | 2026-10-26 | not run | partly: no loader run |
 | Kiro | `~/.kiro/hooks/context-mode.json` | `~/.kiro/skills` | D | pass: 183,551 -> 242 | 2026-10-26 | not installed | partly: stdin payload from adapter, not docs |
 | ZCode | `~/.zcode/cli/config.json` `hooks` | `~/.zcode/skills` | D | pass: 169,068 -> 443 | 2026-10-26 | not installed | partly: skills dir not in docs |
 | Pi | in process `pi/index.js` | package `skills/` | R | pass: 200,062 -> 160 | 2026-10-26 | 0.73.1 | yes: docs shipped in the installed package |
