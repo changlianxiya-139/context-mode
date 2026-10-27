@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL("../../../" + p, import.meta.url), "utf8");
-const INSTALL = "qwen extensions install https://github.com/mksglu/context-mode:context-mode --ref release --consent";
+const INSTALL = "qwen extensions install https://github.com/mksglu/context-mode:context-mode";
 
 test("qwen guide installs with the extension (method 1), which registers the server and the hooks", () => {
   const md = read("docs/install/qwen.md");
@@ -15,7 +15,7 @@ test("qwen guide installs with the extension (method 1), which registers the ser
   assert.match(md, /qwen extensions uninstall context-mode/);
   assert.match(md, /qwen extensions update context-mode/);
   const readme = read("docs/install/README.md");
-  assert.match(readme, /\| Qwen Code \| \[qwen\.md\]\(\.\/qwen\.md\) \| `qwen extensions link/, "README row for Qwen Code does not name the extension command");
+  assert.match(readme, /\| Qwen Code \| `qwen extensions install https:\/\/github\.com\/mksglu\/context-mode:context-mode` \| `qwen extensions update context-mode` \|/, "README row for Qwen Code does not name the extension command");
 });
 
 test("kiro guide does not claim the release hook file uses PromptSubmit or that hook.mjs drops UserPromptSubmit", () => {

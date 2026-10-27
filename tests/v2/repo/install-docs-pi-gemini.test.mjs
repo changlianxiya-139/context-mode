@@ -8,11 +8,11 @@ const section = (md, h) => md.split("## " + h)[1].split("\n## ")[0];
 
 test("gemini guide installs with the extension (method 1)", () => {
   const md = read("docs/install/gemini.md");
-  assert.ok(section(md, "Install").includes("gemini extensions install https://github.com/mksglu/context-mode --ref release --consent"));
+  assert.ok(section(md, "Install").includes("gemini extensions install https://github.com/mksglu/context-mode"));
   assert.doesNotMatch(md, /It does not work yet/);
   assert.match(md, /gemini extensions update context-mode/);
   assert.match(md, /gemini extensions uninstall context-mode/);
-  assert.match(read("docs/install/README.md"), /\| Gemini CLI \| \[gemini\.md\]\(\.\/gemini\.md\) \| `gemini extensions link/);
+  assert.match(read("docs/install/README.md"), /\| Gemini CLI \| `gemini extensions install https:\/\/github\.com\/mksglu\/context-mode` \| `gemini extensions update context-mode` \|/);
 });
 
 test("pi guide does not claim a missing package.json or a /ctx-doctor command in Pi", () => {
