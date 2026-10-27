@@ -17,7 +17,7 @@
 // job, not here (D-M6-arch-3); step 8 writes SHA256SUMS last (build/hash.mjs).
 //
 // Failure: one stderr line `build failed: <reason>` and exit 1 (impl/13 §1).
-import { readFileSync, writeFileSync, rmSync, mkdirSync, readdirSync, copyFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, rmSync, mkdirSync, readdirSync, copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild"; // devDependency only, pinned 0.24.0 (A14); never shipped (ADR-0002 GS7)
@@ -153,7 +153,13 @@ function writeGeneratedPrompt() {
     `export const READ_DENY_TEMPLATE: string = ${JSON.stringify(readDeny.text)};`,
     "",
   ];
-  writeFileSync(GENERATED, lines.join("\n"));
+  // D-RN-GEN-1: parallel test files run --generated-only while server children import this file.
+  // Same bytes: no write. New bytes: temp file + rename, so a reader never sees a truncated file.
+  const text = lines.join("\n");
+  if (existsSync(GENERATED) && readFileSync(GENERATED, "utf8") === text) return;
+  const tmp = `${GENERATED}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, GENERATED);
 }
 
 // "Static imports only" (§2.2 step 2): any dynamic import() that esbuild would have to
