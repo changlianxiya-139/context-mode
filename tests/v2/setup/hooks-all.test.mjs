@@ -318,3 +318,49 @@ test("[D-N7-CODEX-APPROVE-1] setup writes default_tools_approval_mode = \"approv
   assert.equal(hostConfigValueAt(toml, ["mcp_servers", "context-mode", "default_tools_approval_mode"]), "approve");
   assert.deepEqual(hostConfigValueAt(toml, ["mcp_servers", "context-mode", "omit_tools_from"]), ["deferred"]);
 });
+
+// D-WIN-BOM-1: PowerShell 5 / Notepad write a UTF-8 BOM and CRLF. Setup reads such a hook file and config.toml,
+// keeps the user's bytes, and writes CRLF for what it adds; --remove restores the bytes.
+const BOM = "﻿";
+const toCrlf = (s) => s.split("\n").join("\r\n");
+const hasBareLf = (s) => s.split("\r\n").join("").includes("\n");
+
+test("D-WIN-BOM-1: codex setup reads a BOM + CRLF hooks.json and config.toml, keeps them BOM + CRLF, remove restores bytes", async (t) => {
+  const s = sandbox(t);
+  const dir = path.join(s.home, ".codex");
+  mkdirSync(dir, { recursive: true });
+  const hooksText = BOM + toCrlf(JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "my-own-hook" }] }] } }, null, 2) + "\n");
+  const tomlText = BOM + toCrlf('model = "o3"\n\n[mcp_servers.other]\ncommand = "x"\n');
+  writeFileSync(path.join(dir, "hooks.json"), hooksText);
+  writeFileSync(path.join(dir, "config.toml"), tomlText);
+  const first = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["codex"], runId: "a" });
+  assert.equal(first.exitCode, 0, JSON.stringify(first.agents.map((a) => [a.id, a.status, a.reason])));
+  const hooks = readFileSync(path.join(dir, "hooks.json"), "utf8");
+  const toml = readFileSync(path.join(dir, "config.toml"), "utf8");
+  for (const [name, text] of [["hooks.json", hooks], ["config.toml", toml]]) {
+    assert.ok(text.startsWith(BOM), name + " keeps its BOM");
+    assert.ok(!text.slice(1).includes(BOM), name + " has one BOM");
+    assert.ok(!hasBareLf(text), name + " has no bare LF");
+  }
+  assert.ok(commands(JSON.parse(hooks.slice(1))).includes("my-own-hook"), "user hook kept");
+  assert.ok(toml.startsWith(tomlText), "user toml lines are a byte-exact prefix");
+  assert.ok(toml.includes("[mcp_servers.context-mode]"), "server entry written");
+  const second = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["codex"], runId: "b" });
+  assert.deepEqual(second.agents.map((a) => a.changes), [[]], "idempotent");
+  assert.equal(runRemove({ home: s.home }).exitCode, 0);
+  assert.equal(readFileSync(path.join(dir, "hooks.json"), "utf8"), hooksText, "hooks.json restored");
+  assert.equal(readFileSync(path.join(dir, "config.toml"), "utf8"), tomlText, "config.toml restored");
+});
+
+test("D-WIN-BOM-1: a BOM kiro hook file and a BOM vscode JSONC config are read, not reported as a parse failure", async (t) => {
+  const s = sandbox(t);
+  const mcp = path.join(s.home, ".kiro", "settings", "mcp.json");
+  mkdirSync(path.dirname(mcp), { recursive: true });
+  const user = BOM + toCrlf(JSON.stringify({ mcpServers: { other: { command: "o" } } }, null, 2) + "\n");
+  writeFileSync(mcp, user);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["kiro"], runId: "a" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  const after = readFileSync(mcp, "utf8");
+  assert.ok(after.startsWith(BOM) && !hasBareLf(after), "BOM and CRLF kept");
+  assert.ok(JSON.parse(after.slice(1)).mcpServers.other, "user server kept");
+});
