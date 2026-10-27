@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { ADAPTERS } from "../../../src/adapters/table.ts";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
-import { assertWritable, buildRegistry, hostBin, pathEntries, runDoctor, runRemove, runSetup, spawnForm, spawnShim, whichBin, winCmdLine, LOCK_FILE, BACKUP_DIR } from "../../../src/setup/index.ts";
+import { assertWritable, buildRegistry, hostBin, installExitOk, pathEntries, runDoctor, runRemove, runSetup, spawnForm, spawnShim, whichBin, winCmdLine, LOCK_FILE, BACKUP_DIR } from "../../../src/setup/index.ts";
 
 const NODE = process.execPath;
 
@@ -726,4 +726,15 @@ test("setup: copilot-cli flat hook file loses its v1 hook command and keeps the 
   const rm = await runRemove({ home: s.home, env: s.env, runId: "r1" });
   assert.equal(rm.exitCode, 0, JSON.stringify(rm, null, 2));
   assert.equal(readFileSync(file, "utf8"), raw, "remove gives the original bytes back");
+});
+
+// D-WIN-EXITCRASH-1: gemini-cli 0.66.0 on Windows links the extension, prints "linked successfully", then dies on exit with
+// 0xC0000409 (3221226505, STACK_BUFFER_OVERRUN). The work is done; the host's own list command is the judge.
+test("installExitOk: only the Windows exit-time crash code is forgiven, and only when the host lists the plugin (D-WIN-EXITCRASH-1)", () => {
+  assert.equal(installExitOk(0, false, "win32"), true);
+  assert.equal(installExitOk(1, true, "win32"), false, "an ordinary failure stays a failure");
+  assert.equal(installExitOk(3221226505, false, "win32"), false, "crash and not listed: failed");
+  assert.equal(installExitOk(3221226505, true, "win32"), true, "crash and listed: installed");
+  assert.equal(installExitOk(3221226505, true, "linux"), false, "the code means nothing off Windows");
+  assert.equal(installExitOk(null, true, "win32"), false);
 });

@@ -104,6 +104,16 @@ export function hostBin(bin: string, env: SetupContext["env"], platform: NodeJS.
   return { file: undefined, shims };
 }
 
+const WIN_EXIT_CRASH = 3221226505; // 0xC0000409 STACK_BUFFER_OVERRUN
+
+/** D-WIN-EXITCRASH-1: gemini-cli 0.66.0 on Windows finishes `extensions link`, prints "linked successfully", then crashes
+ *  on exit with 0xC0000409. An install exit is accepted when it is 0, or when it is that Windows crash code and the host's
+ *  own list command now shows the plugin. Any other code is a failure. */
+export function installExitOk(status: number | null, listed: boolean, platform: NodeJS.Platform = process.platform): boolean {
+  if (status === 0) return true;
+  return platform === "win32" && status === WIN_EXIT_CRASH && listed;
+}
+
 /** Runs an agent CLI found on PATH; a Windows .cmd/.bat shim goes through cmd.exe (spawnForm). */
 function runBin(bin: string, args: string[], env: SetupContext["env"], input?: string): ReturnType<typeof spawnSync> {
   return spawnShim(hostBin(bin, env).file ?? bin, args, env, { encoding: "utf8", input, timeout: VERIFY_TIMEOUT_MS }) as ReturnType<typeof spawnSync>;
@@ -708,7 +718,7 @@ async function setupRow(row: CheckRow, ctx: SetupContext, run: Run, dryRun: bool
     }
     for (const args of plan.cli) {
       const r = runBin(row.cli!.bin, args, ctx.env, row.cli!.input ?? "");
-      if (r.status !== 0) throw new Error(`${row.cli!.bin} ${args.join(" ")} exited ${r.status}: ${`${r.stderr}`.trim()}`);
+      if (!installExitOk(r.status, r.status === WIN_EXIT_CRASH && listCheck(row, ctx.env)?.ok === true)) throw new Error(`${row.cli!.bin} ${args.join(" ")} exited ${r.status}: ${`${r.stderr}`.trim()}`);
     }
     if (plan.cli.length) for (const args of row.cli!.remove) run.record({ agent: row.id, undo: { bin: row.cli!.bin, args } });
     for (const args of plan.refresh) { // a refresh is not an install: recorded, never undone
