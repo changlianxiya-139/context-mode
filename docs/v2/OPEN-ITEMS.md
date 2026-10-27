@@ -95,3 +95,11 @@ Result: `docs/v2/spikes/hooks-all/RESULT.md`. Rules: ADR-0020. Merged into v2-de
 
 - Test evidence is a name match between the map and test files. I did not read each assertion.
 - Doc numbers were not re-measured. Where two docs disagree (item 4), both are named.
+
+## Release order (2026-10-26)
+
+Fix: D-RN-ORDER-1. The GitHub release is now the last job of `release.yml`, after `publish-npm`.
+
+| # | Item | Status | Next step |
+|---|---|---|---|
+| N5-1 | The GitHub prerelease v2.0.0-next.4 exists, but npm has no 2.0.0-next.4 (run 40496186557: publish-npm failed with E422, D-RN-REPO-1). It was made before D-RN-ORDER-1. | open, left as is on purpose | Owner decides: delete the GitHub prerelease v2.0.0-next.4, or add a note to it that points to the next version on npm. |

@@ -258,7 +258,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: node scripts/release/publish.mjs --promote --version ${{ needs.plan.outputs.version }} --notes "${{ needs.plan.outputs.notes }}"
-        # fast-forwards release to release-staging's commit; pushes the draft tag as a real ref; gh release create with SHA256SUMS attached
+        # fast-forwards release to release-staging's commit; pushes the draft tag as a real ref; no GitHub release (D-RN-ORDER-1:
+        # job github-release runs publish.mjs --github-release after publish-npm)
   rollback:
     needs: build
     if: ${{ inputs.mode == 'rollback' }}
@@ -300,7 +301,8 @@ async function main(): Promise<void>; // prints "version=<v>\nnotes<<EOF\n<notes
 async function main(args: { stage: boolean; promote: boolean; version?: string; sourceCommit?: string; notes?: string }): Promise<void>;
 ```
 - `--stage`: `git switch --orphan release-staging` the first time a `release-staging` branch does not exist remotely, else `git fetch origin release-staging && git switch release-staging`; delete everything in the working tree except `.git`; copy in the downloaded `release-out` artifact; `git add -A`; commit message `release vX.Y.Z` with a trailer line `Source-Commit: <sourceCommit>`; `git tag -a v<version> -m "v<version>"` (annotated, local only — not pushed yet, this is the "draft tag"); `git push origin release-staging --force-with-lease`.
-- `--promote`: `git fetch origin release-staging`; `git push origin release-staging:release --force-with-lease` (fast-forward `release` to the exact `release-staging` commit — using `--force-with-lease` here is safe because this is the only job that ever writes `release`, serialized by the workflow's `concurrency.group: release`); `git push origin v<version>` (push the previously-local annotated tag now that smoke passed); `gh release create v<version> --title v<version> --notes "<notes>" release-out/SHA256SUMS`.
+- `--promote`: `git fetch origin release-staging`; `git push origin release-staging:release --force-with-lease` (fast-forward `release` to the exact `release-staging` commit — using `--force-with-lease` here is safe because this is the only job that ever writes `release`, serialized by the workflow's `concurrency.group: release`); `git push origin v<version>` (push the previously-local annotated tag now that smoke passed). No GitHub release here (D-RN-ORDER-1).
+- `--github-release`: `gh release create v<version> --verify-tag --title v<version> --notes "<notes>" release-out/SHA256SUMS` (a prerelease adds `--prerelease --latest=false`). Refuses when the tag is not on the remote. `release.yml` job `github-release` runs it after `publish-npm` succeeds, or when `publish-npm` was not asked for, so a failed npm publish leaves no GitHub release (D-RN-ORDER-1).
 
 ### 11.2 `smoke.mjs`
 
