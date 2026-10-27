@@ -10,7 +10,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, CanonicalHookEvent } from "../contracts/types.ts";
 import { getAdapter } from "../../adapters/table.ts";
-import { homeDirOf } from "../project/config-dir.ts";
+import { claudeDirOf, homeDirOf } from "../project/config-dir.ts";
 
 /** One agent definition from `--agents` JSON (Claude Code CLI shape). */
 export interface CliAgentDef { tools?: string[]; disallowedTools?: string[]; }
@@ -68,11 +68,11 @@ function findDef(type: string, src: ToolSetSources): AgentDef | null {
     const p = readAgentFile(join(src.projectDir, HOST_CONFIG_DIR_NAME, AGENTS_DIR_NAME, type + AGENT_FILE_EXT));
     if (p !== null) return p;
     if (home !== null) {
-      const u = readAgentFile(join(home, HOST_CONFIG_DIR_NAME, AGENTS_DIR_NAME, type + AGENT_FILE_EXT));
+      const u = readAgentFile(join(claudeDirOf(src.env, home), AGENTS_DIR_NAME, type + AGENT_FILE_EXT));
       if (u !== null) return u;
     }
   } else if (home !== null) {
-    const pl = readPluginAgent(home, type);
+    const pl = readPluginAgent(claudeDirOf(src.env, home), type);
     if (pl !== null) return pl;
   }
   const cli = src.cliAgents;
@@ -97,14 +97,14 @@ function homeDir(env: NodeJS.ProcessEnv): string | null {
 }
 
 // Claude Code plugin agent type "<plugin>:<agent>"; installed_plugins.json keys are "<plugin>@<marketplace>".
-function readPluginAgent(home: string, type: string): AgentDef | null {
+function readPluginAgent(claudeDir: string, type: string): AgentDef | null {
   const cut = type.indexOf(PLUGIN_AGENT_SEPARATOR);
   const plugin = type.slice(0, cut);
   const agent = type.slice(cut + PLUGIN_AGENT_SEPARATOR.length);
   if (agent.indexOf(PLUGIN_AGENT_SEPARATOR) >= 0) return null;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(join(home, HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE), "utf8"));
+    parsed = JSON.parse(readFileSync(join(claudeDir, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE), "utf8"));
   } catch {
     return null;
   }

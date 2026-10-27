@@ -4,8 +4,9 @@
 import path from "node:path";
 
 import { ADAPTERS, getAdapter } from "../adapters/table.ts";
-import { HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
+import { HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
 import type { AgentId, AdapterRow, HostConfigFormat } from "../core/contracts/types.ts";
+import { claudeDirOf } from "../core/project/config-dir.ts";
 import { HOOK_SHAPES, type JsonObject } from "./hook-shapes.ts";
 
 export const SERVER_BUNDLE = "server.mjs";
@@ -199,7 +200,7 @@ function cliFor(ctx: SetupContext, id: AgentId): CliPlan | undefined {
  *  version in installed_plugins.json; npm i -g does not touch that copy, `claude plugin update` renews it. */
 function copyFor(ctx: SetupContext, id: AgentId): HostCopy | undefined {
   if (id !== "claude-code") return undefined;
-  const file = path.join(ctx.home, HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE);
+  const file = path.join(claudeDirOf(ctx.env, ctx.home), HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE);
   return { host: "Claude Code", bin: "claude", plugin: PLUGIN_ID, file, refresh: ["plugin", "update", PLUGIN_ID] };
 }
 
@@ -219,7 +220,7 @@ function hookFilesFor(ctx: SetupContext, id: AgentId): HookFile[] {
   switch (id) {
     case "codex": return [{ file: agentPath(ctx, id, [CODEX_DIR, "hooks.json"]), mode: "rewrite" }];
     case "copilot-cli": return [{ file: path.join(home, ".copilot", "hooks", "context-mode.json"), mode: "rewrite" }];
-    case "claude-code": return [{ file: path.join(home, ".claude", "settings.json"), mode: "drop" }];
+    case "claude-code": return [{ file: path.join(claudeDirOf(ctx.env, home), "settings.json"), mode: "drop" }];
     case "gemini": return [{ file: path.join(home, ".gemini", "settings.json"), mode: "drop" }];
     case "qwen": return [{ file: path.join(home, ".qwen", "settings.json"), mode: "drop" }];
     default: return [];

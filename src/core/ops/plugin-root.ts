@@ -4,12 +4,12 @@ import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AGENT_HOME_DIR, DATA_PLUGINS_DIR_NAME, EXTENSIONS_DIR_NAME, HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME,
+  AGENT_HOME_DIR, DATA_PLUGINS_DIR_NAME, EXTENSIONS_DIR_NAME, HOST_PLUGINS_DIR_NAME,
   MCP_ARGS_FIELD, OWN_MCP_ENTRY, PLUGIN_CACHE_DIR_NAME, PLUGIN_CURRENT_LINK, PLUGIN_NAME, SERVER_KEY,
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow } from "../contracts/types.ts";
-import { homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
+import { claudeDirOf, homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig } from "./host-config.ts";
 
 type RootInput = Pick<AdapterRow, "id" | "installMode">;
@@ -27,7 +27,7 @@ function missing(agent: string, path: string): CtxError {
 // marketplace: ~/.claude/plugins/cache/<marketplace>/context-mode. The marketplace segment is the one cache
 // child that holds a context-mode dir; none or more than one is PLUGIN_ROOT_MISSING (D-M5-O1-1).
 function marketplaceRoot(adapter: RootInput, env: NodeJS.ProcessEnv): string {
-  const cache = join(homeOf(env), HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, PLUGIN_CACHE_DIR_NAME);
+  const cache = join(claudeDirOf(env, homeOf(env)), HOST_PLUGINS_DIR_NAME, PLUGIN_CACHE_DIR_NAME);
   const pattern = join(cache, "*", PLUGIN_NAME);
   if (!existsSync(cache)) throw missing(adapter.id, pattern);
   const found = readdirSync(cache)

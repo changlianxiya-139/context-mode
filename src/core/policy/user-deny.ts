@@ -4,11 +4,11 @@
 const { readFileSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
-import { homeDirOf } from "../project/config-dir.ts";
+import { CLAUDE_CONFIG_DIR_ENV } from "../contracts/constants.ts";
+import { claudeDirOf, homeDirOf } from "../project/config-dir.ts";
 
 // Host file names, not tunable values (same rule as index/walk.ts GITIGNORE). D-M3-E2-2.
 const CLAUDE_DIR = ".claude";
-const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 const LOCAL_SETTINGS = "settings.local.json";
 const SETTINGS = "settings.json";
 
@@ -28,10 +28,10 @@ const BASH_SUBJECT: DenySubject = Object.freeze({ tool: BASH_TOOL });
 /** Deny-config files for an agent, project first, then user. Only claude-code documents one (D-M3-E2-1). */
 function denyFiles(projectDir: string, agent: AgentId): string[] {
   if (agent !== "claude-code") return [];
-  const cfg = process.env[CLAUDE_CONFIG_DIR_ENV];
   // D-M3-F-8: the D-M1-T3-1 home rule (HOME, then USERPROFILE), not os.homedir(), which ignores HOME on Windows.
   const home = homeDirOf(process.env);
-  const userDir = cfg !== undefined && cfg !== "" ? cfg : home === null ? null : join(home, CLAUDE_DIR);
+  const cfg = process.env[CLAUDE_CONFIG_DIR_ENV];
+  const userDir = cfg !== undefined && cfg !== "" ? cfg : home === null ? null : claudeDirOf(process.env, home);
   const project = [join(projectDir, CLAUDE_DIR, LOCAL_SETTINGS), join(projectDir, CLAUDE_DIR, SETTINGS)];
   return userDir === null ? project : [...project, join(userDir, SETTINGS)];
 }
