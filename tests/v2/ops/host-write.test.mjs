@@ -4,7 +4,7 @@
 // no baked build paths.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -127,4 +127,44 @@ test("[M5] host-write/codex-toml-entry-and-pi-agent-dir-env", (t) => {
   const piDir = path.join(home, "custom-pi");
   assert.equal(hostConfigPath("pi", home, { PI_CODING_AGENT_DIR: piDir }), path.join(piDir, "settings.json"));
   assert.equal(hostConfigPath("copilot-cli", home, {}), null);
+});
+
+// DEVIATIONS D-WIN-ATOMIC-3 (GEM-WIN-2): the tmp name is per process, and a rename that stays busy gives a clear error.
+test("[win] host-write/tmp-name-has-the-pid-so-two-runs-do-not-collide", (t) => {
+  const home = tmp(t);
+  const seen = [];
+  const write = (f, text) => { seen.push(f); writeFileSync(f, text, "utf8"); };
+  regenerateHostConfig(getAdapter("claude-code"), home, { env: {}, write });
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0].includes(String(process.pid)), seen[0]);
+  assert.notEqual(seen[0], path.join(home, ".claude", "settings.json.tmp"));
+});
+
+test("[win] host-write/busy-rename-retries-then-succeeds-on-windows", (t) => {
+  const home = tmp(t);
+  const file = path.join(home, ".claude", "settings.json");
+  let n = 0;
+  const rename = (a, b) => { n += 1; if (n <= 2) throw Object.assign(new Error("EPERM: busy"), { code: "EPERM" }); renameSync(a, b); };
+  regenerateHostConfig(getAdapter("claude-code"), home, { env: {}, atomic: { platform: "win32", rename, sleep: () => {} } });
+  assert.equal(n, 3);
+  assert.ok(existsSync(file));
+  assert.deepEqual(readdirSync(path.dirname(file)), ["settings.json"]);
+});
+
+test("[win] host-write/busy-rename-gives-up-names-the-file-and-keeps-the-original", (t) => {
+  const home = tmp(t);
+  const dir = path.join(home, ".config", "opencode");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "opencode.json");
+  writeFileSync(file, JSON.stringify({ keep: 1, plugin: [] }), "utf8");
+  const rename = (a, b) => {
+    if (b === file && a.includes(String(process.pid))) throw Object.assign(new Error("EBUSY: busy, rename"), { code: "EBUSY" });
+    renameSync(a, b);
+  };
+  assert.throws(
+    () => regenerateHostConfig(getAdapter("opencode"), home, { env: {}, atomic: { platform: "win32", rename, sleep: () => {} } }),
+    (e) => e.message.includes(file) && e.message.includes("Fix: close the program using") && e.message.includes("EBUSY"),
+  );
+  assert.equal(JSON.parse(readFileSync(file, "utf8")).keep, 1);
+  assert.deepEqual(readdirSync(dir), ["opencode.json"], "no tmp or trash file left behind");
 });

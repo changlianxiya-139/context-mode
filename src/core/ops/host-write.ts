@@ -8,14 +8,14 @@ import {
   SETTINGS_FILE, UPGRADE_AREA_KEY_SEP, UPGRADE_TRASH_SUFFIX,
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
-import { renameWithRetry } from "./atomic-file.ts";
+import { type AtomicOptions, renameWithRetry, replaceFailure } from "./atomic-file.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 import { withLayout } from "./host-text.ts";
 
 /** Writes `text` to `file`. Injected only by tests to force a failure mid-write (GP11 rollback). */
 export type HostFileWriter = (file: string, text: string) => void;
 
-export interface HostWriteOptions { env?: NodeJS.ProcessEnv; write?: HostFileWriter; }
+export interface HostWriteOptions { env?: NodeJS.ProcessEnv; write?: HostFileWriter; atomic?: AtomicOptions; }
 
 function defaultWrite(file: string, text: string): void {
   writeFileSync(file, text, "utf8");
@@ -45,20 +45,20 @@ function toRow(file: string, edit: HostConfigEdit): UpgradeChangeRow {
 
 /** Replace `file` with `text`. The original is copied to the trash name first and put back on any failure,
  *  so the file is either the old text or the new text, never half written. */
-function writeWithRollback(file: string, text: string, write: HostFileWriter): void {
+function writeWithRollback(file: string, text: string, write: HostFileWriter, atomic: AtomicOptions): void {
   const trash = file + UPGRADE_TRASH_SUFFIX;
-  const tmp = file + HOST_CONFIG_TMP_SUFFIX;
+  const tmp = `${file}${HOST_CONFIG_TMP_SUFFIX}.${process.pid}`; // per process: two runs do not share a tmp file
   const had = existsSync(file);
   mkdirSync(dirname(file), { recursive: true });
   if (had) copyFileSync(file, trash);
   try {
     write(tmp, text);
-    renameWithRetry(tmp, file);
+    renameWithRetry(tmp, file, atomic);
   } catch (err) {
     rmSync(tmp, { force: true });
-    if (had) renameWithRetry(trash, file);
+    if (had) renameWithRetry(trash, file, atomic);
     else rmSync(file, { force: true });
-    throw err;
+    throw replaceFailure(file, err);
   }
   rmSync(trash, { force: true });
 }
@@ -75,6 +75,6 @@ export function regenerateHostConfig(row: AdapterRow, home: string, opts: HostWr
   const exists = existsSync(current.path);
   if (exists && result.text === current.text) return [];
   const text = result.text === "" && current.format !== "toml" ? JSON.stringify({}) : result.text;
-  writeWithRollback(current.path, current.layout === undefined ? text : withLayout(text, current.layout), opts.write ?? defaultWrite);
+  writeWithRollback(current.path, current.layout === undefined ? text : withLayout(text, current.layout), opts.write ?? defaultWrite, opts.atomic ?? {});
   return result.edits.map((e) => toRow(current.path, e));
 }

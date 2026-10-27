@@ -32,6 +32,15 @@ export function renameWithRetry(from: string, to: string, opts: AtomicOptions = 
   }
 }
 
+/** The error for a failed replace of `file`: names the file and, for a "file in use" code, what to close. */
+export function replaceFailure(file: string, e: unknown): Error {
+  const busy = ATOMIC_RENAME_BUSY_CODES.includes(errCode(e) ?? "");
+  const cause = (e as Error).message;
+  return new Error(busy
+    ? `Could not replace ${file}: ${cause}. Fix: close the program using ${file}, then re-run`
+    : `Could not write ${file}: ${cause}. Fix: check the path and its permissions, then re-run`, { cause: e });
+}
+
 /** Write `text` to a tmp file next to `file`, then rename it over `file`. On failure the tmp file is removed,
  *  the old `file` is untouched, and the error names `file`. */
 export function atomicWriteFile(file: string, text: string, opts: AtomicOptions = {}): void {
@@ -42,11 +51,6 @@ export function atomicWriteFile(file: string, text: string, opts: AtomicOptions 
     renameWithRetry(tmp, file, opts);
   } catch (e) {
     rmSync(tmp, { force: true });
-    const code = errCode(e);
-    const busy = ATOMIC_RENAME_BUSY_CODES.includes(code ?? "");
-    const cause = (e as Error).message;
-    throw new Error(busy
-      ? `Could not replace ${file}: ${cause}. Fix: close the program using ${file}, then re-run`
-      : `Could not write ${file}: ${cause}. Fix: check the path and its permissions, then re-run`, { cause: e });
+    throw replaceFailure(file, e);
   }
 }
