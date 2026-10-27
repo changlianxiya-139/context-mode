@@ -7,7 +7,7 @@ import { join } from "node:path";
 import {
   AGENT_ARG, AGENT_HOME_DIR, CODEX_FEATURES_HOOKS_KEY, CONFIG_TOML_FILE, D3_DETAIL, D3_PARTS, D4_REASON_JOIN,
   D5B_DETAIL, D5B_FIX, DOCTOR_FIX_UPGRADE, DOCTOR_LABEL, DOCTOR_PASS_DETAIL, HOOK_COMMAND_FIELD, HOOK_COMMAND_SEP,
-  HOOK_ENTRY_FILE, HOOK_GROUP_HOOKS_FIELD, HOOKS_JSON_FILE, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND, EXE_SUFFIX,
+  HOOK_ENTRY_FILE, HOOK_SCRIPT_SEPS, HOOK_GROUP_HOOKS_FIELD, HOOKS_JSON_FILE, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND, EXE_SUFFIX,
   HOOKS_KEY, MCP_ANY_MATCH, POST_TOOL_USE, KIRO_ACTION_FIELD, KIRO_TOOL_MATCHERS, KIRO_TRIGGER_FIELD, MATCHER_ALT, MATCHER_ANY, MATCHER_CLOSE, MATCHER_OPEN,
   OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, OWN_TOOL_PREFIX, PI_AGENT_DIR, PI_AGENT_DIR_ENV, REGEX_ESCAPE,
   REGEX_SPECIAL_CHARS, SETTINGS_FILE, SHELL_QUOTE, TOOL_HOOK_EVENTS, V1_PATH_SEPS, VSCODE_CLAUDE_HOOKS_SETTING,
@@ -82,7 +82,7 @@ function isOwnCommand(command: unknown, agent: AgentId): command is string {
   if (!split.rest.endsWith(tail) || split.rest.length <= tail.length) return false;
   let script = split.rest.slice(0, split.rest.length - tail.length);
   if (script.startsWith(SHELL_QUOTE) && script.endsWith(SHELL_QUOTE) && script.length > 1) script = script.slice(1, -1);
-  return script === HOOK_ENTRY_FILE || V1_PATH_SEPS.some((sep) => script.endsWith(sep + HOOK_ENTRY_FILE));
+  return script === HOOK_ENTRY_FILE || HOOK_SCRIPT_SEPS.some((sep) => script.endsWith(sep + HOOK_ENTRY_FILE));
 }
 
 /** Own hook entries for one native event, per the host shape (impl/10 §1.5). */

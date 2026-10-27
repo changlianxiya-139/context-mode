@@ -231,3 +231,40 @@ test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 owns the exact command setup builds f
   const d3 = checkHostConfig(row, { HOME: home }, home);
   assert.equal(d3.status, "PASS", `${cmd}: ${d3.detail}`);
 });
+
+// GEM-WIN-4: Gemini and Qwen ship their hooks inside the extension (<ext>/hooks/hooks.json, <ext>/hooks/qwen.json), not in
+// ~/.<agent>/settings.json. Gemini's command names the script as "${extensionPath}${/}hook.mjs" (the host fills ${/} with
+// the OS separator). Runs on every OS: the files come from the real generator, the paths are plain temp dirs.
+async function extensionInstall(t, id, mutate = (s) => s) {
+  const { generateManifests } = await import("../../../build/manifests.ts");
+  const base = tmp(t);
+  const out = path.join(base, "out");
+  mkdirSync(out);
+  generateManifests(out);
+  const home = path.join(base, "home");
+  const ext = path.join(home, `.${id}`, "extensions", "context-mode");
+  mkdirSync(path.join(ext, "hooks"), { recursive: true });
+  const file = id === "gemini" ? "hooks.json" : `${id}.json`;
+  writeFileSync(path.join(ext, "hooks", file), mutate(readFileSync(path.join(out, "hooks", file), "utf8")), "utf8");
+  return { home, row: getAdapter(id), file: path.join(ext, "hooks", file) };
+}
+
+for (const id of ["gemini", "qwen"]) {
+  test(`[GEM-WIN-4] doctor-config/D3 reads the ${id} extension hook file the build generates and passes`, async (t) => {
+    const { home, row } = await extensionInstall(t, id);
+    const d3 = checkHostConfig(row, { HOME: home }, home);
+    assert.equal(d3.status, "PASS", d3.detail);
+  });
+
+  test(`[GEM-WIN-4] doctor-config/D3 fails a ${id} extension whose hook command is not ours`, async (t) => {
+    const { home, row } = await extensionInstall(t, id, (s) => s.replaceAll("hook.mjs", "other.mjs"));
+    assert.equal(checkHostConfig(row, { HOME: home }, home).status, "FAIL");
+  });
+}
+
+test("[GEM-WIN-4] doctor-config/D3 gemini: the ${/} token is a separator, a bare ${extensionPath} suffix is not", async (t) => {
+  const real = await extensionInstall(t, "gemini");
+  assert.match(readFileSync(real.file, "utf8"), /\$\{extensionPath\}\$\{\/\}hook\.mjs/);
+  const bad = await extensionInstall(t, "gemini", (s) => s.replaceAll("${extensionPath}${/}hook.mjs", "${extensionPath}hook.mjs"));
+  assert.equal(checkHostConfig(bad.row, { HOME: bad.home }, bad.home).status, "FAIL");
+});

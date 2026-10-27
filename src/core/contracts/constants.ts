@@ -473,8 +473,8 @@ export const HOOK_HOST_FILE: Readonly<Record<AgentId, {
 } | null>> = Object.freeze({
   "claude-code": { root: "plugin", file: ["hooks", "claude-code.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
   codex: { root: "home", file: [".codex", "hooks.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
-  gemini: { root: "home", file: [".gemini", "settings.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: false },
-  qwen: { root: "home", file: [".qwen", "settings.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
+  gemini: { root: "plugin", file: ["hooks", "hooks.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: false },
+  qwen: { root: "plugin", file: ["hooks", "qwen.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
   "copilot-cli": { root: "home", file: [".copilot", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeoutSec", matcher: false },
   vscode: { root: "project", file: [".github", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeout", matcher: false },
   kiro: { root: "home", file: [".kiro", "hooks", "context-mode.json"], key: ["hooks"], shape: "kiro", timeoutKey: "timeout", matcher: false },
@@ -595,6 +595,9 @@ export const PI_ROLE = "custom"; // #1263: Pi injected text is never role "user"
 export const PI_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR"; // Pi agent-dir override (#1035); caller passes it to detectV1 as scope.piAgentDir
 export const PI_PACKAGE_SOURCE_KEY = "source"; // Pi packages[] entry: a string or {source,...}
 export const V1_PATH_SEPS = Object.freeze(["/", "\\"] as const); // hooks/codex/ in a command, POSIX or Windows
+// GEM-WIN-4: Gemini fills ${/} with the OS separator, so its hook command reads "${extensionPath}${/}hook.mjs".
+export const HOST_SEP_TOKEN = "${/}";
+export const HOOK_SCRIPT_SEPS: readonly string[] = Object.freeze([...V1_PATH_SEPS, HOST_SEP_TOKEN]);
 // V1Finding.reason texts, used verbatim in the D4 row and the upgrade change table (impl/07 §3 step 3).
 export const V1_REASON = Object.freeze({
   hook: "old context-mode hook entry: command contains context-mode and an old script name or context-mode hook",
