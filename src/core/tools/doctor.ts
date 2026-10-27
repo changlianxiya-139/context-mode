@@ -20,7 +20,7 @@ import { checkMcp, checkMode, checkNode, checkProject, checkShell, checkVersion 
 import { checkHookRoundTrip } from "../ops/doctor-hook.ts";
 import { healD8 } from "../ops/db-heal.ts";
 import { buildReport } from "../ops/report.ts";
-import { claudeDirOf, codexDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
+import { claudeDirOf, codexDirOf, copilotDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
 import { closeDb, openDb } from "../store/db.ts";
 
@@ -96,7 +96,7 @@ export async function runDoctorChecks(ctx: ToolContext, adapter: AdapterRow, hos
     D1: () => checkVersion({ bundleSha: BUNDLE_SHA, env: buildChildEnv(env), cwd: project.worktree, signal: ctx.signal }),
     D2: () => checkNode({ nodeVersion: process.version, bunVersion: process.versions.bun }),
     D3: () => checkHostConfig(adapter, env, project.worktree),
-    D4: () => checkV1Leftovers(adapter.id, requireHomeDir(env), { project: project.worktree, piAgentDir: env[PI_AGENT_DIR_ENV], claudeDir: claudeDirOf(env, requireHomeDir(env)) }),
+    D4: () => checkV1Leftovers(adapter.id, requireHomeDir(env), { project: project.worktree, piAgentDir: env[PI_AGENT_DIR_ENV], claudeDir: claudeDirOf(env, requireHomeDir(env)), copilotDir: copilotDirOf(env, requireHomeDir(env)) }),
     D5: () => hookRow(ctx, adapter, host),
     D5b: () => checkDoubleFire(adapter.id, project.worktree),
     D6: () => checkMcp(ctx),

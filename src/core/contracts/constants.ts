@@ -560,6 +560,7 @@ export const CLAUDE_USER_CONFIG_FILE = ".claude.json"; // $HOME/.claude.json
 export const HOOKS_JSON_FILE = "hooks.json"; // codex, zcode cli/
 export const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR"; // D-WF-CC-CONFIG-1: Claude Code user dir override (default ~/.claude)
 export const CODEX_HOME_ENV = "CODEX_HOME"; // D-N6-CODEX-HOME-2: Codex reads config.toml and hooks.json from here (default ~/.codex)
+export const COPILOT_HOME_ENV = "COPILOT_HOME"; // D-WIN-COPILOT-HOME-1: Copilot CLI replaces ~/.copilot as a whole with it (hooks/, skills/)
 export const CONFIG_TOML_FILE = "config.toml"; // codex
 export const CONFIG_JSON_FILE = "config.json"; // zcode cli/
 export const ZCODE_CLI_DIR = "cli";

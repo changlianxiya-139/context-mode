@@ -26,8 +26,8 @@ To do the setup step by hand, run `context-mode setup --print copilot-cli` and f
 ## What setup changes
 
 - Runs `copilot mcp add context-mode`, which writes `~/.copilot/mcp-config.json`.
-- Writes the hooks to `~/.copilot/hooks/context-mode.json` (sessionStart, userPromptSubmitted, preToolUse, postToolUse).
-- Writes the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` to `~/.copilot/skills/<name>/SKILL.md`.
+- Writes the hooks to `~/.copilot/hooks/context-mode.json`, or `$COPILOT_HOME/hooks/context-mode.json` when COPILOT_HOME is set (sessionStart, userPromptSubmitted, preToolUse, postToolUse).
+- Writes the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` to `~/.copilot/skills/<name>/SKILL.md` (`$COPILOT_HOME/skills/<name>/SKILL.md` when COPILOT_HOME is set).
 - Effect: the call runs, then a large result is replaced by a short selection that names `ctx_search` (replace). postToolUse returns `modifiedResult` (D-HA-COPILOT-REPLACE-1).
 - Backs up each file first. A failed step is rolled back byte for byte.
 - Never edits `CLAUDE.md`, `AGENTS.md` or other instruction files.

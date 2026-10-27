@@ -305,6 +305,7 @@ export interface V1Scope {
   project?: string; // VS Code project-scope rows, Kiro <project>/.kiro/steering/KIRO.md; none → home only
   piAgentDir?: string; // env PI_CODING_AGENT_DIR (#1035); none → <home>/.pi/agent
   claudeDir?: string; // env CLAUDE_CONFIG_DIR (D-WF-CC-CONFIG-1); none → <home>/.claude
+  copilotDir?: string; // env COPILOT_HOME (D-WIN-COPILOT-HOME-1); none → <home>/.copilot
   tmp?: string; // none → os.tmpdir()
 }
 
@@ -312,7 +313,8 @@ export interface V1Scope {
 export function detectV1(agent: AgentId, home: string, scope: V1Scope = {}): V1Finding[] {
   const out: V1Finding[] = [];
   const project = scope.project;
-  const agentHome = agent === "claude-code" && scope.claudeDir !== undefined ? scope.claudeDir : join(home, ...AGENT_HOME_DIR[agent]);
+  const agentHome = agent === "claude-code" && scope.claudeDir !== undefined ? scope.claudeDir
+    : agent === "copilot-cli" && scope.copilotDir !== undefined ? scope.copilotDir : join(home, ...AGENT_HOME_DIR[agent]);
   switch (agent) {
     case "claude-code": scanClaudeCode(home, agentHome, out); break;
     case "codex": scanCodex(agentHome, out); break;

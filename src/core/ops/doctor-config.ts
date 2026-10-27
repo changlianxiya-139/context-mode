@@ -15,7 +15,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, DoctorRow } from "../contracts/types.ts";
 import { hasReplace } from "../../adapters/table.ts";
-import { codexDirOf, homeDirOf } from "../project/config-dir.ts";
+import { codexDirOf, copilotDirOf, homeDirOf } from "../project/config-dir.ts";
 import { detectV1, type V1Scope } from "./detect-v1.ts";
 import { hostConfigValueAt, mergeOwnEntries, parseHostConfig, readHostConfig } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -149,7 +149,9 @@ function hookParts(row: AdapterRow, home: string, env: NodeJS.ProcessEnv, worktr
   let block: unknown;
   try {
     const root = spec.root === "plugin" ? resolvePluginRoot(row, env) : spec.root === "home" ? home : worktree;
-    const file = row.id === "codex" ? join(codexDirOf(env, home), HOOKS_JSON_FILE) : join(root, ...spec.file); // D-N6-CODEX-HOME-2
+    const file = row.id === "codex" ? join(codexDirOf(env, home), HOOKS_JSON_FILE) // D-N6-CODEX-HOME-2
+      : row.id === "copilot-cli" ? join(copilotDirOf(env, home), ...spec.file.slice(1)) // D-WIN-COPILOT-HOME-1: file = [".copilot", ...]
+      : join(root, ...spec.file);
     block = hostConfigValueAt(readParsed(row.id, file).value, spec.key);
     if (row.id === "codex") {
       const config = readParsed(row.id, join(codexDirOf(env, home), CONFIG_TOML_FILE)).value;

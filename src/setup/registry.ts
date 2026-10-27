@@ -6,7 +6,7 @@ import path from "node:path";
 import { ADAPTERS, getAdapter } from "../adapters/table.ts";
 import { HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
 import type { AgentId, AdapterRow, HostConfigFormat } from "../core/contracts/types.ts";
-import { claudeDirOf } from "../core/project/config-dir.ts";
+import { claudeDirOf, copilotDirOf } from "../core/project/config-dir.ts";
 import { HOOK_SHAPES, type JsonObject } from "./hook-shapes.ts";
 
 export const SERVER_BUNDLE = "server.mjs";
@@ -58,6 +58,7 @@ const OPENCODE_PLUGIN = ["opencode", "plugin.js"];
 const CODEX_CONFIG_FILE = "config.toml";
 const CODEX_HOME_ENV = "CODEX_HOME";
 const CODEX_DIR = ".codex";
+const COPILOT_DIR = ".copilot";
 
 /** D-N5-CODEX-HOME-1: a path under HOME as the agent reads it. Codex reads config.toml, hooks.json and skills/
  *  from $CODEX_HOME (default ~/.codex), so a ".codex/..." path moves under CODEX_HOME when it is set. */
@@ -65,6 +66,8 @@ function agentPath(ctx: SetupContext, id: AgentId, rel: string | readonly string
   const segs = typeof rel === "string" ? rel.split("/") : [...rel];
   const codexHome = ctx.env[CODEX_HOME_ENV];
   if (id === "codex" && segs[0] === CODEX_DIR && codexHome !== undefined && codexHome !== "") return path.join(codexHome, ...segs.slice(1));
+  // D-WIN-COPILOT-HOME-1: Copilot CLI only; VS Code's hook file also sits under .copilot/ but VS Code does not read COPILOT_HOME.
+  if (id === "copilot-cli" && segs[0] === COPILOT_DIR) return path.join(copilotDirOf(ctx.env, ctx.home), ...segs.slice(1));
   return path.join(ctx.home, ...segs);
 }
 
@@ -219,7 +222,7 @@ function hookFilesFor(ctx: SetupContext, id: AgentId): HookFile[] {
   const home = ctx.home;
   switch (id) {
     case "codex": return [{ file: agentPath(ctx, id, [CODEX_DIR, "hooks.json"]), mode: "rewrite" }];
-    case "copilot-cli": return [{ file: path.join(home, ".copilot", "hooks", "context-mode.json"), mode: "rewrite" }];
+    case "copilot-cli": return [{ file: agentPath(ctx, id, [COPILOT_DIR, "hooks", "context-mode.json"]), mode: "rewrite" }];
     case "claude-code": return [{ file: path.join(claudeDirOf(ctx.env, home), "settings.json"), mode: "drop" }];
     case "gemini": return [{ file: path.join(home, ".gemini", "settings.json"), mode: "drop" }];
     case "qwen": return [{ file: path.join(home, ".qwen", "settings.json"), mode: "drop" }];

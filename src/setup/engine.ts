@@ -7,7 +7,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { claudeDirOf } from "../core/project/config-dir.ts";
+import { claudeDirOf, copilotDirOf } from "../core/project/config-dir.ts";
 import { AGENT_HOME_DIR, DB_FILE_NAME, PROJECTS_DIR_NAME, TOOL_ORDER, UPGRADE_REPORT_ONLY_REASONS } from "../core/contracts/constants.ts";
 import { CtxError } from "../core/contracts/errors.ts";
 import type { AgentId, V1Finding } from "../core/contracts/types.ts";
@@ -593,8 +593,15 @@ function takeLock(root: string, runId: string): string | undefined {
 
 // ---------- detect ----------
 
+/** The dir whose presence marks a host as installed: the agent's own config-dir override when it has one. */
+function agentHomeDir(id: AgentId, ctx: SetupContext): string {
+  if (id === "claude-code") return claudeDirOf(ctx.env, ctx.home);
+  if (id === "copilot-cli") return copilotDirOf(ctx.env, ctx.home); // D-WIN-COPILOT-HOME-1
+  return path.join(ctx.home, ...AGENT_HOME_DIR[id]);
+}
+
 export function detectAgents(reg: CheckRow[], ctx: SetupContext): AgentId[] {
-  return reg.filter((r) => existsSync(r.id === "claude-code" ? claudeDirOf(ctx.env, ctx.home) : path.join(ctx.home, ...AGENT_HOME_DIR[r.id]))
+  return reg.filter((r) => existsSync(agentHomeDir(r.id, ctx))
     || (r.listCommand && which(r.listCommand.bin, ctx.env))).map((r) => r.id);
 }
 
@@ -657,7 +664,7 @@ async function setupRow(row: CheckRow, ctx: SetupContext, run: Run, dryRun: bool
   } catch (e) { return { ...res, status: "FAIL", reason: (e as Error).message }; }
   // The config entry is current when the plan changes nothing in that file but codex trust entries.
   const configEdited = (file: string): boolean => plan.edits.some((e) => e.file === file && e.changes.some((c) => !isTrust(row, c)));
-  res.v1 = detectV1(row.id, ctx.home, { claudeDir: claudeDirOf(ctx.env, ctx.home) }).filter((f) => !(row.config && f.file === row.config.file && !configEdited(f.file)));
+  res.v1 = detectV1(row.id, ctx.home, { claudeDir: claudeDirOf(ctx.env, ctx.home), copilotDir: copilotDirOf(ctx.env, ctx.home) }).filter((f) => !(row.config && f.file === row.config.file && !configEdited(f.file)));
   res.changes = [...plan.edits.flatMap((e) => e.changes), ...[...plan.cli, ...plan.refresh].map((args) => ({ command: [row.cli!.bin, ...args] }))];
   if (dryRun) return res;
   try {
