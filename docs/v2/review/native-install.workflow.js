@@ -8,6 +8,7 @@ export const meta = {
   ],
 }
 
+const SNH = { model: 'claude-sonnet-5-5', effort: 'high' }
 const OPH = { model: 'claude-opus-5-5', effort: 'high' }
 const SNM = { model: 'claude-sonnet-5-5', effort: 'medium' }
 const H = { type: 'object', properties: {
@@ -46,11 +47,13 @@ const rs = (await parallel(AGENTS.map((a) => () => retry(`${base('r-' + a)}\n\nR
 log(`researched ${rs.length}/${AGENTS.length}`)
 
 phase('Build')
-const build = await retry(`${base('build')}\n\nRole: architect + implementer on branch exp/native-install (create from v2-design, push about every minute). Research per host: ${JSON.stringify(rs).slice(0, 14000)}.
-1. Write ADR-0023 "Native install per agent": the table (agent, native command, source, update command, what ships), how it supersedes the install parts of ADR-0019 (context-mode setup becomes the fallback and repair tool for hosts with no native step; doctor stays the verifier), the Claude Code marketplace source (npm source if the docs allow it, so the host's own plugin update refreshes its copy), and the release-branch removal (tickets/release-on-demand-no-release-branch.md).
-2. Ship what each native command needs in the npm package (manifests, keys, files), test-first: a build test that checks every manifest each native installer reads is present and points at shipped files.
-3. Rewrite docs/install/*.md and the README install section: per host, the native command first, short, copy-paste; then "check: context-mode doctor". No node -e.
-4. node --test tests/v2/ 0 fail, gate --all --quick green. Return done, commits, numbers, summary.`, { label: 'ni-build', phase: 'Build', schema: RESULT, ...OPH })
+const RS = JSON.stringify(rs).slice(0, 14000)
+const SMALL = `Branch exp/native-install (fetch it; it exists; if v2-design moved, merge origin/v2-design into it first, keep both sides). HARD: commit and push after EACH file you finish, at least every 3 minutes; a step that pushes nothing is a failure. Keep this step small: do only the part below.`
+const CC_DECISION = `Owner decision for Claude Code (tickets/release-on-demand-no-release-branch.md, update 2026-10-27, follows vercel/vercel-plugin and upstash/context7): when v2 is on main, the marketplace lives on main and points at a plugin subfolder (e.g. ./plugins/claude-code) holding the built files, written only by the release workflow; users run /plugin marketplace add mksglu/context-mode then /plugin install context-mode@context-mode; the release branch is removed then. Until then #release is the temporary source for testing next. claude plugin install <pkg>@npm is disabled for the account (npm_marketplace_disabled), so do not depend on it.`
+const b1 = await retry(`${base('b1')}\n\n${SMALL}\nStep 1 of 3 (docs only, no code): write docs/v2/adr/ADR-0023-native-install.md (match the other ADR files' format): the table per host (agent, native command, source, update command, what ships, gap), how it supersedes the install parts of ADR-0019 (context-mode setup becomes the fallback/repair for the part a host's native step cannot do; doctor stays the verifier), and the Claude Code part exactly as this decision: ${CC_DECISION}\nResearch per host: ${RS}\nReturn done, commits, numbers, summary.`, { label: 'ni-b1-adr', phase: 'Build', schema: RESULT, ...OPH })
+const b2 = await retry(`${base('b2')}\n\n${SMALL}\nStep 2 of 3 (code, test-first): read ADR-0023 on the branch. Ship in the npm package what each host's native command reads (manifests, keys, files) and, for Claude Code, the plugins/claude-code subfolder layout the release workflow will write (build output + marketplace.json source pointing at it; do not remove the release branch yet). Red commit first: a build test over the packed package that every manifest a native installer reads exists and points at shipped files. Then green. node --test tests/v2/ 0 fail. Return done, commits, numbers, summary.`, { label: 'ni-b2-ship', phase: 'Build', schema: RESULT, ...OPH })
+const b3 = await retry(`${base('b3')}\n\n${SMALL}\nStep 3 of 3 (docs): rewrite docs/install/*.md and the README install section per ADR-0023: per host the native command first (short, copy-paste), the native update command, then "check: context-mode doctor"; explain in one line what npm next is (v2 prerelease; latest stays v1). No node -e. Run build/check-install-docs.mjs green. Return done, commits, numbers, summary.`, { label: 'ni-b3-docs', phase: 'Build', schema: RESULT, ...SNH })
+const build = { done: !!(b1 && b1.done && b2 && b2.done && b3 && b3.done), b1, b2, b3 }
 
 phase('Verify')
 const vs = build && build.done ? (await parallel(AGENTS.map((a) => () => retry(`${base('v-' + a)}\n\nRole: verify ${a} on branch exp/native-install. Build and npm pack the package. In a temp HOME, install it with the documented native command from docs/install (point the source at the packed tarball or the local package dir when the registry name is not published yet, and say so). Then: is the MCP server listed by the host, is the hook registered and does it fire on a documented hook payload (pipe it into the registered command), are the 3 skills present with the host's real tool names, does context-mode doctor --agents ${a} pass. No commits. Return agent, pass, command, evidence, problems.`,
