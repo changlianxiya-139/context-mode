@@ -213,7 +213,7 @@ const SKILL_CHANNEL = {
   "claude-code": { kind: "package", path: "claude-code/skills" }, // D-HQ-SKILLS-2
   codex: { kind: "home-dir", path: ".codex/skills" },
   gemini: { kind: "package", path: "skills" },
-  qwen: { kind: "home-dir", path: ".qwen/skills" },
+  qwen: { kind: "package", path: "skills" }, // D-HQ-SKILLS-3: <extension>/skills, shared with gemini
   "copilot-cli": { kind: "home-dir", path: ".copilot/skills" },
   vscode: { kind: "home-dir", path: ".copilot/skills" },
   kiro: { kind: "home-dir", path: ".kiro/skills" },

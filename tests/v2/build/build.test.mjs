@@ -84,12 +84,13 @@ test("[M6] build/command-skills: gemini skills/ and pi pi/skills are the 3 skill
   const { getAdapter } = await import("../../../src/adapters/table.ts");
   const { out, status, stderr } = build(t);
   assert.equal(status, 0, stderr);
-  for (const [id, dir, stats] of [["gemini", "skills", "mcp_context-mode_ctx_stats"], ["pi", "pi/skills", "ctx_stats"]]) {
+  // D-HQ-SKILLS-3: qwen reads the same <extension>/skills dir as gemini, so that dir names both tools.
+  for (const [id, dir, stats, prefixes] of [["gemini", "skills", "mcp_context-mode_ctx_stats or mcp__context-mode__ctx_stats", ["mcp_context-mode_", "mcp__context-mode__"]], ["pi", "pi/skills", "ctx_stats", [""]]]) {
     assert.equal(getAdapter(id).skillChannel.path, dir, id + " skill channel is the build dir");
     assert.deepEqual(readdirSync(path.join(out, dir)).sort(), [...SKILLS].sort(), dir);
     for (const s of SKILLS) {
       const src = readFileSync(path.join(REPO, "skills", s, "SKILL.md"), "utf8");
-      assert.equal(readFileSync(path.join(out, dir, s, "SKILL.md"), "utf8"), renderSkill(src, getAdapter(id).toolNamePrefix), dir + " " + s);
+      assert.equal(readFileSync(path.join(out, dir, s, "SKILL.md"), "utf8"), renderSkill(src, prefixes), dir + " " + s);
     }
     assert.ok(readFileSync(path.join(out, dir, "ctx-stats", "SKILL.md"), "utf8").includes("Call the " + stats + " tool"), id + " names " + stats);
   }

@@ -38,7 +38,9 @@ function shipped(out, id) {
   const reg = buildRegistry({ home: path.join(out, "no-home"), pkgDir: out, env: {} }).find((r) => r.id === id);
   const s = reg.skillInstall;
   if (s.kind === "package") {
-    return { prefixes: [ADAPTERS.find((a) => a.id === id).toolNamePrefix],
+    // D-HQ-SKILLS-3: hosts that read the same package dir share one text, so it names every sharing host's tool.
+    const sharers = ADAPTERS.filter((a) => a.skillChannel.kind === "package" && a.skillChannel.path === s.via);
+    return { prefixes: [...new Set(sharers.map((a) => a.toolNamePrefix))],
       texts: Object.fromEntries(SKILLS.map((n) => [n, readFileSync(path.join(out, s.via, n, "SKILL.md"), "utf8")])) };
   }
   return { prefixes: s.prefixes, texts: Object.fromEntries(s.files.map((f) => [f.name, renderSkill(readFileSync(f.src, "utf8"), s.prefixes)])) };
@@ -78,8 +80,8 @@ test("[D-HQ-SKILLS-2] claude-code ships its own skills dir and the plugin reads 
 const CTX_STATS_NAME = {
   "claude-code": "mcp__plugin_context-mode_context-mode__ctx_stats",
   codex: "mcp__context_mode__ctx_stats",
-  gemini: "mcp_context-mode_ctx_stats",
-  qwen: "mcp__context-mode__ctx_stats",
+  gemini: "mcp_context-mode_ctx_stats or mcp__context-mode__ctx_stats", // D-HQ-SKILLS-3: gemini and qwen share <extension>/skills
+  qwen: "mcp_context-mode_ctx_stats or mcp__context-mode__ctx_stats",
   "copilot-cli": "context-mode-ctx_stats or mcp_context-mode_ctx_stats",
   vscode: "context-mode-ctx_stats or mcp_context-mode_ctx_stats",
   kiro: "mcp_context-mode_ctx_stats",
@@ -92,5 +94,26 @@ test("[D-N5-SKILL-1] the built package's ctx-stats skill names each host's real 
   for (const row of ADAPTERS) {
     const { texts } = shipped(out, row.id);
     assert.ok(texts["ctx-stats"].includes("Call the " + CTX_STATS_NAME[row.id] + " tool "), `${row.id}: ${texts["ctx-stats"]}`);
+  }
+});
+
+// D-HQ-SKILLS-3 (live, Qwen Code 0.26.1 and Gemini CLI 0.65.0): both hosts load skills from the fixed path
+// <extension>/skills and ignore a skills key in the manifest, and their native install commands take the repo or package
+// root. So the one shipped skills/ dir is what both hosts load; qwen got Gemini's text (mcp_context-mode_ctx_*), which is
+// not a qwen tool. The text now names both hosts' tools, and setup no longer writes a second qwen copy to ~/.qwen/skills.
+test("[D-HQ-SKILLS-3] gemini and qwen both load <extension>/skills, so that dir names the tool of each host", () => {
+  const qwen = ADAPTERS.find((a) => a.id === "qwen");
+  const gemini = ADAPTERS.find((a) => a.id === "gemini");
+  assert.deepEqual(qwen.skillChannel, { kind: "package", path: "skills" });
+  assert.deepEqual(gemini.skillChannel, { kind: "package", path: "skills" });
+  for (const name of SKILLS) {
+    let rest = readFileSync(path.join(out, "skills", name, "SKILL.md"), "utf8");
+    for (const tool of toolsIn(SOURCE[name])) {
+      for (const p of [gemini.toolNamePrefix, qwen.toolNamePrefix]) {
+        assert.ok(rest.includes(p + tool), `${name} names ${p + tool}`);
+        rest = rest.split(p + tool).join("");
+      }
+    }
+    assert.equal(rest.includes("ctx_"), false, `${name} names a tool that is neither gemini's nor qwen's: ${rest}`);
   }
 });
