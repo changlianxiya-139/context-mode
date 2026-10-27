@@ -369,7 +369,7 @@ test("[N5] publish/github-release-no-tag: the tag is not on the remote -> refuse
 test("[N5] publish/github-release-args: exactly one mode; --github-release needs --version (D-RN-ORDER-1)", (t) => {
   const { work } = fixture(t);
   const cases = [
-    [["--github-release", "--promote", "--version", "2.0.0"], "release failed: pass exactly one of --stage, --promote or --github-release\n"],
+    [["--github-release", "--promote", "--version", "2.0.0"], "release failed: pass exactly one of --stage or --promote or --github-release\n"],
     [["--github-release"], "release failed: --version <x.y.z> is required\n"],
   ];
   for (const [args, want] of cases) {

@@ -6,9 +6,9 @@
 //     build artifact in ./release-out. Puts exactly release-out/* on `release-staging`, one commit
 //     "release v<x.y.z>" with trailer "Source-Commit: <sha>", tags v<x.y.z> annotated and local only
 //     (the draft tag), pushes `release-staging` with --force-with-lease.
-//   --promote --version <x.y.z> [--notes <text>] [--remote <name-or-path>]
-//     Moves `release` to the exact `release-staging` commit (--force-with-lease), pushes the tag,
-//     and on the default remote runs `gh release create` with release-out/SHA256SUMS.
+//   --promote --version <x.y.z> [--remote <name-or-path>]
+//     Moves `release` to the exact `release-staging` commit (--force-with-lease) and pushes the tag.
+//     It makes no GitHub release (D-RN-ORDER-1).
 //     A `release` branch that holds only untagged (rehearsal) commits is replaced. A pushed annotated v2+
 //     tag whose commit is in `release` must be in the staged commit too, else refuse (D-FU-RF-1).
 //
@@ -16,6 +16,11 @@
 // (release.yml started by a pushed v2.* tag), stage requires it to name --source-commit and makes no tag;
 // promote requires it to name the staged Source-Commit and pushes no tag. A prerelease GitHub release gets
 // --prerelease --latest=false, so it never shows as Latest over v1.
+//
+//   --github-release --version <x.y.z> [--notes <text>] [--remote <name-or-path>]
+//     On the default remote runs `gh release create v<x.y.z> --verify-tag` with release-out/SHA256SUMS. The tag
+//     must already be on the remote. release.yml runs this only after publish-npm succeeded (or was not asked
+//     for), so a failed npm publish leaves no GitHub release (D-RN-ORDER-1, run 40496186557, v2.0.0-next.4).
 //
 // A failure writes one line "release failed: <reason>" to stderr and exits 1 (impl/13 §1, §10).
 // Node built-ins only; no regex (TECH-SPEC §11): arguments and git output are read with plain
@@ -46,18 +51,19 @@ function fail(reason) {
 }
 
 function parseArgs(argv) {
-  const args = { stage: false, promote: false, remote: RELEASE_REMOTE_DEFAULT };
+  const args = { stage: false, promote: false, githubRelease: false, remote: RELEASE_REMOTE_DEFAULT };
   const valued = { "--version": "version", "--source-commit": "sourceCommit", "--notes": "notes", "--remote": "remote" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--stage") args.stage = true;
     else if (a === "--promote") args.promote = true;
+    else if (a === "--github-release") args.githubRelease = true;
     else if (a in valued) {
       if (i + 1 >= argv.length) fail(`${a} needs a value`);
       args[valued[a]] = argv[++i];
     } else fail(`unknown argument ${a}`);
   }
-  if (args.stage === args.promote) fail("pass exactly one of --stage or --promote");
+  if ([args.stage, args.promote, args.githubRelease].filter(Boolean).length !== 1) fail("pass exactly one of --stage or --promote or --github-release");
   if (!isReleaseVersion(args.version)) fail("--version <x.y.z> is required");
   if (args.stage && !isSha(args.sourceCommit)) fail("--stage needs --source-commit <40-hex sha>");
   return args;
@@ -149,7 +155,7 @@ function refuseDroppedRelease(remote, tag, staged) {
   }
 }
 
-function promote({ version, notes, remote }) {
+function promote({ version, remote }) {
   const tag = RELEASE_TAG_PREFIX + version;
   if (remoteHead(remote, RELEASE_STAGING_BRANCH) === "") fail(`${RELEASE_STAGING_BRANCH} does not exist on ${remote}`);
   git("fetch", remote, `refs/heads/${RELEASE_STAGING_BRANCH}`);
@@ -167,7 +173,7 @@ function promote({ version, notes, remote }) {
   } else {
     pushDraftTag(remote, tag, staged);
   }
-  githubRelease(remote, tag, version, notes);
+  console.log(`gh release skipped: publish.mjs --github-release makes it after npm publish (D-RN-ORDER-1)`);
 }
 
 function pushDraftTag(remote, tag, staged) {
@@ -185,7 +191,9 @@ function pushDraftTag(remote, tag, staged) {
   console.log(`promoted ${tag}: ${RELEASE_BRANCH} = ${staged}`);
 }
 
-function githubRelease(remote, tag, version, notes) {
+function githubRelease({ version, notes, remote }) {
+  const tag = RELEASE_TAG_PREFIX + version;
+  if (remoteTag(remote, tag) === "") fail(`tag ${tag} is not on ${remote}; promote pushes it first`);
   if (remote !== RELEASE_REMOTE_DEFAULT) {
     console.log(`gh release skipped: remote ${remote} is not ${RELEASE_REMOTE_DEFAULT} (D-M6-arch-5)`);
     return;
@@ -198,7 +206,8 @@ function githubRelease(remote, tag, version, notes) {
 async function main(argv) {
   const args = parseArgs(argv);
   if (args.stage) stage(args);
-  else promote(args);
+  else if (args.promote) promote(args);
+  else githubRelease(args);
 }
 
 main(process.argv.slice(2)).catch((err) => {
