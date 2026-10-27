@@ -12,7 +12,7 @@ export const REQUIRED_HEADINGS = ["Summary", "ctx-report", "What happened", "Exp
 // REPORT_COMMAND_PREFIX (ADR-0019 D7), REPORT_TRUNCATED_LINE prefix. GP11/issue-intake-allowed-keys fails when the two sides differ.
 export const REPORT_HEADER = "| Check | Status | Detail | Fix |";
 export const REPORT_HEADER_RULE = "|---|---|---|---|";
-export const CHECK_KEYS = ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"];
+export const CHECK_KEYS = ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10", "D11"];
 export const ENV_KEYS = ["env.NODE_ENV"];
 export const ALLOWED_KEYS = new Set([...CHECK_KEYS, ...ENV_KEYS]);
 const TRUNCATED_PREFIX = "(report truncated at ";

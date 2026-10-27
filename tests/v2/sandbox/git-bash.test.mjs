@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { findRuntime } from "../../../src/core/sandbox/runtimes.ts";
 import { runProcess } from "../../../src/core/sandbox/spawn.ts";
 import { ctxExecute } from "../../../src/core/tools/execute.ts";
@@ -46,7 +46,7 @@ function layout() {
   writeFileSync(join(git, "mingw64", "bin", "git.exe"), "");
   return { top, apps, sys32, git, bash: join(git, "bin", "bash.exe") };
 }
-const sep = ":"; // the spoofed platform keeps POSIX path.delimiter
+const sep = delimiter; // the spoof keeps the real path module: ":" on POSIX, ";" on Windows
 
 test("[VT-WIN] shell on Windows: the WindowsApps alias dir first, Git dir later -> Git's bash.exe", async () => {
   const l = layout();
