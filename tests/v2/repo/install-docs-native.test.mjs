@@ -72,3 +72,27 @@ test("install-native: both README files list every host with its native install 
     assert.ok(!text.includes("node -e"), `${file.join("/")} has node -e`);
   }
 });
+
+// ADR-0023 + tickets/release-on-demand-no-release-branch.md: until v2 is on main, main holds the old build, so each of
+// the 4 GitHub-source hosts names the test command with the release ref (host syntax, each run in a temp HOME) and
+// the command to use after v2 is on main. D-NI-DOCS-REF-1.
+const REF_LINES = {
+  "claude-code": ["`claude plugin marketplace add mksglu/context-mode#release`", "`claude plugin marketplace add mksglu/context-mode`", "`claude plugin install context-mode@context-mode`"],
+  codex: ["`codex plugin marketplace add mksglu/context-mode@release`", "`codex plugin marketplace add mksglu/context-mode`", "`codex plugin add context-mode@context-mode`"],
+  gemini: ["`gemini extensions install https://github.com/mksglu/context-mode --ref release`", "`gemini extensions install https://github.com/mksglu/context-mode`"],
+  qwen: ["`qwen extensions install https://github.com/mksglu/context-mode:context-mode --ref release`", "`qwen extensions install https://github.com/mksglu/context-mode:context-mode`"],
+};
+
+test("install-native: 4 GitHub-source pages say Testing v2 (next) with the release ref and After v2 is on main without it", () => {
+  for (const [id, [withRef, without, ...rest]] of Object.entries(REF_LINES)) {
+    const install = installSection(read("docs", "install", `${id}.md`));
+    const testing = install.split("\n").find((l) => l.startsWith("Testing v2 (next): "));
+    const after = install.split("\n").find((l) => l.startsWith("After v2 is on main: "));
+    assert.ok(testing, `${id}.md lacks the "Testing v2 (next): " line`);
+    assert.ok(after, `${id}.md lacks the "After v2 is on main: " line`);
+    assert.ok(testing.includes(withRef), `${id}.md testing line lacks ${withRef}`);
+    assert.ok(!after.includes("#release") && !after.includes("@release") && !after.includes("--ref"), `${id}.md after line holds a ref`);
+    assert.ok(after.includes(without), `${id}.md after line lacks ${without}`);
+    for (const r of rest) assert.ok(testing.includes(r) && after.includes(r), `${id}.md lacks ${r}`);
+  }
+});
