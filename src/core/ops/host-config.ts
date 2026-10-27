@@ -37,7 +37,7 @@ export function readHostConfig(agent: AgentId, path: string): HostConfigText {
     if (existsSync(jsonc)) file = jsonc;
   }
   const raw = existsSync(file) ? readFileSync(file, "utf8") : "";
-  return { agent, text: hostText(raw), format: formatOf(file), path: file, layout: hostLayout(raw) }; // CC-WIN-3: BOM and CRLF off for parsing
+  return { agent, text: hostText(raw), format: agent === "opencode" && !file.endsWith(TOML_EXT) ? "jsonc" : formatOf(file), path: file, layout: hostLayout(raw) }; // CC-WIN-3: BOM and CRLF off for parsing
 }
 
 // ------------------------------------------------------------------------------------------ JSONC scan

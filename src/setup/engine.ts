@@ -10,10 +10,10 @@ import path from "node:path";
 import { claudeDirOf, copilotDirOf, opencodeDirOf } from "../core/project/config-dir.ts";
 import { AGENT_HOME_DIR, DB_FILE_NAME, PROJECTS_DIR_NAME, TOOL_ORDER, UPGRADE_REPORT_ONLY_REASONS } from "../core/contracts/constants.ts";
 import { CtxError } from "../core/contracts/errors.ts";
-import type { AgentId, V1Finding } from "../core/contracts/types.ts";
+import type { AgentId, HostConfigFormat, V1Finding } from "../core/contracts/types.ts";
 import { detectV1 } from "../core/ops/detect-v1.ts";
 import { atomicWriteFile, renameWithRetry, unlinkWithRetry } from "../core/ops/atomic-file.ts";
-import { editHostConfigText } from "../core/ops/host-config.ts";
+import { editHostConfigText, parseHostConfig } from "../core/ops/host-config.ts";
 import { hostLayout, hostText, withLayout } from "../core/ops/host-text.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
 import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
@@ -190,15 +190,19 @@ function mergeOwn(cur: unknown, want: unknown, mark: string): unknown {
   return want;
 }
 
+/** The format of a host file: the MCP config row's format when the file is that config (opencode.json), else JSON. */
+const fileFormat = (row: CheckRow, file: string): HostConfigFormat => (row.config?.file === file ? row.config.format : "json");
+
 /** One edit of `file` (a JSON host file), chained on any earlier edit of the same file in this plan. */
-function planJsonKeys(row: CheckRow, edits: FileEdit[], file: string, want: (doc: Json) => [readonly string[], unknown][]): void {
+function planJsonKeys(row: CheckRow, edits: FileEdit[], file: string, format: HostConfigFormat, want: (doc: Json) => [readonly string[], unknown][]): void {
   const prior = edits.find((e) => e.file === file);
   const text = prior ? prior.after : readOr(file);
   let doc: unknown = {};
-  if (text !== undefined && text.trim() !== "") { try { doc = JSON.parse(text); } catch { throw new Error(parseFail(row, file)); } }
+  // D-WIN-JSONC-1: the host's own format (OpenCode reads opencode.json as JSONC), read by the one shared host-config parser.
+  if (text !== undefined && text.trim() !== "") { try { doc = parseHostConfig(row.id, file, text, format); } catch { throw new Error(parseFail(row, file)); } }
   if (!isObj(doc)) throw new Error(parseFail(row, file));
   let res;
-  try { res = editHostConfigText(row.id, file, text ?? "", "json", want(doc)); }
+  try { res = editHostConfigText(row.id, file, text ?? "", format, want(doc)); }
   catch (e) { if (e instanceof CtxError) throw new Error(parseFail(row, file)); throw e; }
   if (!res.edits.length) return;
   const changes = res.edits.map((e) => ({ file, ...e }));
@@ -228,10 +232,10 @@ function planCodexTrust(row: CheckRow, edits: FileEdit[], hooksFile: string, fil
 function planHookInstall(row: CheckRow, edits: FileEdit[], env: SetupContext["env"]): void {
   const h = row.hookInstall;
   if (h.kind === "file") {
-    planJsonKeys(row, edits, h.file, (doc) => Object.keys(h.shape).map((k) => [[k], mergeOwn(doc[k], h.shape[k], h.command)]));
+    planJsonKeys(row, edits, h.file, fileFormat(row, h.file), (doc) => Object.keys(h.shape).map((k) => [[k], mergeOwn(doc[k], h.shape[k], h.command)]));
     if (h.trust) planCodexTrust(row, edits, h.file, h.trust, h.command, env);
   } else if (h.kind === "plugin-list") {
-    planJsonKeys(row, edits, h.file, (doc) => {
+    planJsonKeys(row, edits, h.file, fileFormat(row, h.file), (doc) => {
       const cur = doc[h.key[0]];
       const list = Array.isArray(cur) ? cur : [];
       return [[h.key, list.includes(h.entry) ? list : [...list, h.entry]]];

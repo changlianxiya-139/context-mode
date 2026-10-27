@@ -180,7 +180,7 @@ function configFor(ctx: SetupContext, id: AgentId): ConfigTarget | undefined {
   }
   if (id === "opencode") { // docs/install/opencode.md: a local MCP entry in opencode.json
     return {
-      file: path.join(opencodeDirOf(ctx.env, ctx.home), OPENCODE_BASE_CONFIG_FILE), format: "json", key: ["mcp", SERVER_KEY],
+      file: path.join(opencodeDirOf(ctx.env, ctx.home), OPENCODE_BASE_CONFIG_FILE), format: "jsonc", key: ["mcp", SERVER_KEY],
       value: { type: "local", command: [node, server, flag, agent], enabled: true },
     };
   }
