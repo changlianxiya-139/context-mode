@@ -35,7 +35,10 @@ export function whichBin(bin: string, env: Env, platform: NodeJS.Platform = proc
 }
 
 const CMD_QUOTE_CHARS = '"&|<>^()!';
-const CMD_REFUSE_CHAR = "%";
+const CMD_PERCENT = "%";
+const CMD_SUBSTRING_MARK = ":";
+/** Variables cmd.exe computes itself; they expand even when the environment has no entry for them. */
+const CMD_DYNAMIC_VARS: readonly string[] = Object.freeze(["CD", "DATE", "TIME", "RANDOM", "ERRORLEVEL", "CMDEXTVERSION", "CMDCMDLINE", "HIGHESTNUMANODENUMBER"]);
 
 /** True when cmd.exe needs this argument in quotes: empty, white space, or one of its operator characters. */
 function needsCmdQuotes(a: string): boolean {
@@ -44,12 +47,30 @@ function needsCmdQuotes(a: string): boolean {
   return false;
 }
 
+/** The first `%NAME%` (or `%NAME:~a,b%` / `%NAME:x=y%`) in `text` that cmd.exe would expand: NAME is a variable in `env`
+ *  (matched without case) or one of cmd's own. A % that names no variable stays as typed in a /c line, so URL escapes
+ *  like %20 pass. Every pair of % signs is tried, because cmd.exe may pair them in either way. Char scan, no regex. */
+function expandablePercent(text: string, env: Env): string | undefined {
+  const names = new Set<string>(CMD_DYNAMIC_VARS);
+  for (const k of Object.keys(env)) names.add(k.toUpperCase());
+  for (let i = text.indexOf(CMD_PERCENT); i >= 0; i = text.indexOf(CMD_PERCENT, i + 1)) {
+    for (let j = text.indexOf(CMD_PERCENT, i + 1); j >= 0; j = text.indexOf(CMD_PERCENT, j + 1)) {
+      const inner = text.slice(i + 1, j);
+      const cut = inner.indexOf(CMD_SUBSTRING_MARK);
+      const name = cut < 0 ? inner : inner.slice(0, cut);
+      if (name !== "" && names.has(name.toUpperCase())) return `${CMD_PERCENT}${inner}${CMD_PERCENT}`;
+    }
+  }
+  return undefined;
+}
+
 /** cmd.exe line for a .cmd/.bat shim: Node refuses to spawn those without a shell (CVE-2024-27980). Each argument is
- *  quoted, so paths with spaces survive; the outer quotes are the /s form. cmd.exe expands %VAR% even inside quotes and
- *  no quoting stops it, so a % in the shim path or an argument throws (D-WIN-CMDPCT-1): a changed value is worse than a refusal. */
-export function winCmdLine(file: string, args: string[]): string {
+ *  quoted, so paths with spaces survive; the outer quotes are the /s form. cmd.exe expands %NAME% even inside quotes and
+ *  no quoting stops it, so a %NAME% it would expand throws (D-WIN-CMDPCT-1): a changed value is worse than a refusal. */
+export function winCmdLine(file: string, args: string[], env: Env = {}): string {
   for (const a of [file, ...args]) {
-    if (a.includes(CMD_REFUSE_CHAR)) throw new Error(`cannot run ${file} through cmd.exe: cmd.exe expands %...% inside quotes, so the value ${JSON.stringify(a)} would change. Use a path and arguments without %`);
+    const hit = expandablePercent(a, env);
+    if (hit !== undefined) throw new Error(`cannot run ${file} through cmd.exe: cmd.exe expands ${hit} inside quotes, so the value ${JSON.stringify(a)} would change. Use a path and arguments without it`);
   }
   const q = (a: string): string => (needsCmdQuotes(a) ? `"${a.split('"').join('""')}"` : a);
   return `"${[file, ...args].map(q).join(" ")}"`;
@@ -61,7 +82,7 @@ export interface SpawnForm { command: string; args: string[]; windowsVerbatimArg
  *  arguments (the documented way since CVE-2024-27980); any other file, and every file elsewhere, runs as is. */
 export function spawnForm(file: string, args: string[], env: Env, platform: NodeJS.Platform = process.platform): SpawnForm {
   if (platform === "win32" && WIN_SHIM_EXTS.includes(path.extname(file).toLowerCase())) {
-    return { command: envGet(env, "COMSPEC") || DEFAULT_COMSPEC, args: ["/d", "/s", "/c", winCmdLine(file, args)], windowsVerbatimArguments: true };
+    return { command: envGet(env, "COMSPEC") || DEFAULT_COMSPEC, args: ["/d", "/s", "/c", winCmdLine(file, args, env)], windowsVerbatimArguments: true };
   }
   return { command: file, args, windowsVerbatimArguments: false };
 }

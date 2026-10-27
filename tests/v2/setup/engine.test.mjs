@@ -372,28 +372,41 @@ test("winCmdLine: quotes each argument for cmd.exe /d /s /c", () => {
   assert.equal(winCmdLine("c.cmd", ['say "hi"']), '"c.cmd "say ""hi""""');
 });
 
-// D-WIN-CMDPCT-1 (GEM-WIN-7): cmd.exe expands %VAR% even inside double quotes, and no quoting stops it, so a shim
-// argument or shim path with a % is refused with a message instead of being run with an altered value.
-test("winCmdLine: a % in the shim path or an argument is refused with a clear message (D-WIN-CMDPCT-1)", () => {
-  assert.throws(() => winCmdLine("C:\\p\\gemini.cmd", ["extensions", "link", "C:\\100%\\pkg"]), /cmd\.exe expands %/);
-  assert.throws(() => winCmdLine("C:\\%TEMP%\\gemini.cmd", []), /cmd\.exe expands %/);
-  assert.throws(() => winCmdLine("c.cmd", ["%PATH%"]), /%PATH%/, "the message names the argument");
-  assert.equal(winCmdLine("c.cmd", ["a!b", "a^b", "(x)", "a&b"]), '"c.cmd "a!b" "a^b" "(x)" "a&b""', "every other cmd metacharacter stays quoted");
-  assert.equal(winCmdLine("c.cmd", ["tab\there", "nb\u00a0sp", "plain"]), '"c.cmd "tab\there" "nb\u00a0sp" plain"', "any white space is quoted");
+// D-WIN-CMDPCT-1 (GEM-WIN-7): cmd.exe expands %NAME% inside double quotes when NAME is a defined variable (or one of
+// its dynamic ones, %CD% %DATE% ...), and no quoting stops it. Such a value is refused with a message. A % that names
+// no variable is left as typed by cmd.exe, so URL escapes (file:///C:/RUNNER%7E1/a%20b) must pass: smoke hands the
+// gemini shim a file URL like that on Windows (CI run 40567801094).
+test("winCmdLine: a %NAME% that cmd.exe would expand is refused with a clear message (D-WIN-CMDPCT-1)", () => {
+  const env = { Path: "C:\\bin", TEMP: "C:\\t" };
+  assert.throws(() => winCmdLine("C:\\p\\gemini.cmd", ["x", "C:\\%TEMP%\\pkg"], env), /cmd\.exe expands %TEMP%/);
+  assert.throws(() => winCmdLine("C:\\%temp%\\gemini.cmd", [], env), /cmd\.exe expands %temp%/, "name matched without case");
+  assert.throws(() => winCmdLine("c.cmd", ["%PATH:~0,5%"], env), /%PATH:~0,5%/, "substring form");
+  assert.throws(() => winCmdLine("c.cmd", ["%cd%"], {}), /%cd%/, "dynamic variable, no env entry needed");
+  assert.throws(() => winCmdLine("c.cmd", ["a%", "%TEMP", "x%TEMP%"], env), /%TEMP%/, "a pair that spans arguments counts");
 });
 
-test("spawnForm: a Windows shim with a % argument throws, a native .exe and other platforms are not affected (D-WIN-CMDPCT-1)", () => {
-  assert.throws(() => spawnForm("C:\\n p\\gemini.cmd", ["x", "%APPDATA%"], {}, "win32"), /cmd\.exe expands %/);
-  assert.deepEqual(spawnForm("C:\\n p\\claude.exe", ["%APPDATA%"], {}, "win32").args, ["%APPDATA%"]);
-  assert.deepEqual(spawnForm("/usr/bin/codex.cmd", ["100%"], {}, "linux").args, ["100%"]);
+test("winCmdLine: a % that names no variable passes, and every other metacharacter stays quoted (D-WIN-CMDPCT-1)", () => {
+  const env = { Path: "C:\\bin" };
+  const url = "file:///C:/RUNNER%7E1/AppData/Local/Temp/cm%20smoke-x/bare.git";
+  assert.equal(winCmdLine("c.cmd", [url], env), `"c.cmd ${url}"`);
+  assert.equal(winCmdLine("c.cmd", ["100%", "%%", "%TEMP"], env), '"c.cmd 100% %% %TEMP"');
+  assert.equal(winCmdLine("c.cmd", ["a!b", "a^b", "(x)", "a&b"], env), '"c.cmd "a!b" "a^b" "(x)" "a&b""');
+  assert.equal(winCmdLine("c.cmd", ["tab\there", "nb\u00a0sp", "plain"], env), '"c.cmd "tab\there" "nb\u00a0sp" plain"', "any white space is quoted");
+});
+
+test("spawnForm: a Windows shim line with an expandable %NAME% throws; .exe and other platforms are not affected (D-WIN-CMDPCT-1)", () => {
+  assert.throws(() => spawnForm("C:\\n p\\gemini.cmd", ["x", "%APPDATA%"], { APPDATA: "C:\\a" }, "win32"), /cmd\.exe expands %APPDATA%/);
+  assert.deepEqual(spawnForm("C:\\n p\\gemini.cmd", ["file:///a%20b"], {}, "win32").args, ["/d", "/s", "/c", '""C:\\n p\\gemini.cmd" file:///a%20b"']);
+  assert.deepEqual(spawnForm("C:\\n p\\claude.exe", ["%APPDATA%"], { APPDATA: "x" }, "win32").args, ["%APPDATA%"]);
+  assert.deepEqual(spawnForm("/usr/bin/codex.cmd", ["%HOME%"], { HOME: "/h" }, "linux").args, ["%HOME%"]);
 });
 
 test("spawnShim: a refused % argument is a failed step with the reason, not a throw and not a run (D-WIN-CMDPCT-1)", () => {
   // platform "win32" is faked, so this runs on every OS; nothing is spawned because the refusal comes first.
-  const r = spawnShim("C:\\n p\\gemini.cmd", ["extensions", "link", "C:\\100%\\pkg"], {}, { encoding: "utf8" }, "win32");
+  const r = spawnShim("C:\\n p\\gemini.cmd", ["extensions", "link", "C:\\%TEMP%\\pkg"], { TEMP: "C:\\t" }, { encoding: "utf8" }, "win32");
   assert.equal(r.status, null);
-  assert.match(String(r.stderr), /cmd\.exe expands %/);
-  assert.match(String(r.error?.message), /cmd\.exe expands %/);
+  assert.match(String(r.stderr), /cmd\.exe expands %TEMP%/);
+  assert.match(String(r.error?.message), /cmd\.exe expands %TEMP%/);
   assert.equal(r.stdout, "");
 });
 
@@ -429,6 +442,23 @@ test("spawnForm: on Windows an npm-style .cmd shim in a dir with a space runs an
   const r = spawnSync(f.command, f.args, { env, encoding: "utf8", windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
   assert.equal(r.status, 0, `${r.error ?? ""} ${r.stderr}`);
   assert.deepEqual(JSON.parse(r.stdout), ["mcp", "list", "--json", "a b"]);
+});
+
+test("spawnForm: on Windows real cmd.exe leaves a %7E/%20 URL argument as typed, and a %TEMP% argument is refused (D-WIN-CMDPCT-1)", { skip: process.platform !== "win32" && "cmd.exe is Windows only" }, (t) => {
+  const s = sandbox(t);
+  const dir = path.join(s.root, "npm bin");
+  mkdirSync(dir);
+  writeFileSync(path.join(dir, "echo-args.js"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));\n");
+  writeFileSync(path.join(dir, "echo-args.cmd"), `@"${process.execPath}" "%~dp0echo-args.js" %*\r\n`);
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== "PATH")), PATH: dir };
+  const file = whichBin("echo-args", env);
+  const url = "file:///C:/RUNNER%7E1/AppData/Local/Temp/cm%20smoke-x/bare.git";
+  const r = spawnShim(file, ["install", url], env, { encoding: "utf8" });
+  assert.equal(r.status, 0, `${r.error ?? ""} ${r.stderr}`);
+  assert.deepEqual(JSON.parse(String(r.stdout)), ["install", url]);
+  const bad = spawnShim(file, ["install", "%TEMP%"], { ...env, TEMP: "C:\\x" }, { encoding: "utf8" });
+  assert.equal(bad.status, null);
+  assert.match(String(bad.stderr), /cmd\.exe expands %TEMP%/);
 });
 
 // D-INST-1: `gemini extensions install <dir>` asks "trust this folder?" and waits for a key even with --consent, so a
