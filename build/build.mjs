@@ -29,7 +29,7 @@ import {
   BUNDLE_SHA_DEFINE,
   READ_DENY_FIXED_CAP,
 } from "../src/core/contracts/constants.ts";
-import { OUT_FILES, assertOutPackageJson, generateManifests } from "./manifests.ts";
+import { OUT_FILES, CODEX_PLUGIN_SKILLS, assertOutPackageJson, generateManifests } from "./manifests.ts";
 import { writeHashes } from "./hash.mjs";
 import { isReleaseVersion } from "../scripts/release/release-tags.mjs"; // x.y.z[-pre], D-RN-TAG-1
 import { getAdapter } from "../src/adapters/table.ts";
@@ -222,14 +222,20 @@ function copyFixture(outDir) {
 // gets its own copy, rendered from the one skills/ source with that host's real tool names (split/join).
 const SKILL_HOSTS = Object.freeze(["claude-code", "gemini", "pi"]); // D-HQ-SKILLS-2: claude-code reads claude-code/skills
 
+// ADR-0023 (D-NI-CODEX-1): the codex plugin (.codex-plugin/plugin.json "skills") reads its own rendered copy.
+const SKILL_TARGETS = Object.freeze([
+  ...SKILL_HOSTS.map((id) => [id, getAdapter(id).skillChannel.path]),
+  ["codex", CODEX_PLUGIN_SKILLS],
+]);
+
 function copySkills(outDir) {
-  for (const id of SKILL_HOSTS) {
+  for (const [id, dir] of SKILL_TARGETS) {
     const row = getAdapter(id);
     for (const name of COMMAND_SKILLS) {
       const rel = path.join(SKILLS_DIR, name, SKILL_FILE);
       const src = path.join(REPO_ROOT, rel);
       if (!existsSync(src)) throw new BuildError(`missing ${rel}`);
-      const dest = path.join(outDir, row.skillChannel.path, name, SKILL_FILE);
+      const dest = path.join(outDir, dir, name, SKILL_FILE);
       mkdirSync(path.dirname(dest), { recursive: true });
       writeFileSync(dest, renderSkill(readFileSync(src, "utf8"), row.toolNamePrefix));
     }
