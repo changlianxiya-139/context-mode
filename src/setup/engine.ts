@@ -15,7 +15,7 @@ import { detectV1 } from "../core/ops/detect-v1.ts";
 import { atomicWriteFile, renameWithRetry, unlinkWithRetry } from "../core/ops/atomic-file.ts";
 import { editHostConfigText, parseHostConfig } from "../core/ops/host-config.ts";
 import { hostLayout, hostText, withLayout } from "../core/ops/host-text.ts";
-import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
+import { AGENT_FLAG, BACKUP_DIR, COMMAND_SKILLS, HOOK_BUNDLE, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
 import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
 import { pathEntries, spawnForm, spawnShim, whichBin, winCmdLine } from "./spawn-bin.ts";
 export { spawnForm, spawnShim, whichBin, winCmdLine };
@@ -172,18 +172,35 @@ function planHookFile(row: CheckRow, hf: HookFile): FileEdit | undefined {
   return changes.length ? { file: hf.file, before, after: JSON.stringify(doc, null, 2) + "\n", changes } : undefined;
 }
 
-// ADR-0020 merge: objects merge key by key; in an array, an own item (it holds the hook command or plugin entry)
-// that differs from the wanted one is replaced, user items stay; scalars take the wanted value.
-const holds = (v: unknown, mark: string): boolean => JSON.stringify(v).includes(JSON.stringify(mark).slice(1, -1));
+// Z-WIN-4 (D-WIN-HOOKMERGE-1): an own hook command is found by a stable marker, not by the full command string. The
+// marker is `hook.mjs` (after a path separator or a quote) then `--agent <id>` and the end of the string. A node upgrade,
+// C:\\ vs c:\\, an 8.3 short name or an nvm-windows switch changes the paths before the marker; the marker stays.
+// String search only (rule: no regex as a mechanism). A leading `& ` (the PowerShell field) is before the marker.
+const MARK_LEFT = ["/", "\\", '"'];
+export function isOwnHookCommand(cmd: unknown, agent: string): boolean {
+  if (typeof cmd !== "string") return false;
+  const at = cmd.lastIndexOf(HOOK_BUNDLE);
+  if (at <= 0 || !MARK_LEFT.includes(cmd[at - 1])) return false;
+  let tail = cmd.slice(at + HOOK_BUNDLE.length);
+  if (tail.startsWith('"')) tail = tail.slice(1);
+  return tail.trim() === `${AGENT_FLAG} ${agent}`;
+}
+const holdsOwn = (v: unknown, agent: string): boolean =>
+  typeof v === "string" ? isOwnHookCommand(v, agent)
+    : Array.isArray(v) ? v.some((x) => holdsOwn(x, agent))
+    : isObj(v) ? Object.values(v).some((x) => holdsOwn(x, agent)) : false;
+
+// ADR-0020 merge: objects merge key by key; in an array, an own item (it holds an own hook command, at any package
+// path) that differs from the wanted one is replaced, user items stay; scalars take the wanted value.
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-function mergeOwn(cur: unknown, want: unknown, mark: string): unknown {
+function mergeOwn(cur: unknown, want: unknown, agent: string): unknown {
   if (isObj(want)) {
     const base: Json = isObj(cur) ? { ...cur } : {};
-    for (const [k, v] of Object.entries(want)) base[k] = mergeOwn(base[k], v, mark);
+    for (const [k, v] of Object.entries(want)) base[k] = mergeOwn(base[k], v, agent);
     return base;
   }
   if (Array.isArray(want)) {
-    const base = Array.isArray(cur) ? cur.filter((x) => !holds(x, mark) || want.some((w) => same(w, x))) : [];
+    const base = Array.isArray(cur) ? cur.filter((x) => !holdsOwn(x, agent) || want.some((w) => same(w, x))) : [];
     for (const w of want) if (!base.some((x) => same(x, w))) base.push(w);
     return base;
   }
@@ -232,7 +249,7 @@ function planCodexTrust(row: CheckRow, edits: FileEdit[], hooksFile: string, fil
 function planHookInstall(row: CheckRow, edits: FileEdit[], env: SetupContext["env"]): void {
   const h = row.hookInstall;
   if (h.kind === "file") {
-    planJsonKeys(row, edits, h.file, fileFormat(row, h.file), (doc) => Object.keys(h.shape).map((k) => [[k], mergeOwn(doc[k], h.shape[k], h.command)]));
+    planJsonKeys(row, edits, h.file, fileFormat(row, h.file), (doc) => Object.keys(h.shape).map((k) => [[k], mergeOwn(doc[k], h.shape[k], row.id)]));
     if (h.trust) planCodexTrust(row, edits, h.file, h.trust, h.command, env);
   } else if (h.kind === "plugin-list") {
     planJsonKeys(row, edits, h.file, fileFormat(row, h.file), (doc) => {
