@@ -148,7 +148,16 @@ function planHookFile(row: CheckRow, hf: HookFile): FileEdit | undefined {
   for (const [event, groups] of Object.entries(doc.hooks)) {
     if (!Array.isArray(groups)) continue;
     for (let g = groups.length - 1; g >= 0; g--) {
-      const list = isObj(groups[g]) ? (groups[g] as Json).hooks : undefined;
+      const group = groups[g];
+      // Flat shape (copilot-cli): the event array holds {type,command,...} entries, no inner hooks array (CP-WIN-5).
+      if (isObj(group) && typeof group.command === "string" && !Array.isArray(group.hooks)) {
+        if (!group.command.includes(V1_HOOK_MARK)) continue;
+        const at = `hooks.${event}[${g}].command`;
+        if (hf.mode === "rewrite") { changes.push({ file: hf.file, path: at, before: group.command, after: want }); group.command = want; }
+        else { changes.push({ file: hf.file, path: at, before: group.command, after: null }); groups.splice(g, 1); }
+        continue;
+      }
+      const list = isObj(group) ? group.hooks : undefined;
       if (!Array.isArray(list)) continue;
       for (let h = list.length - 1; h >= 0; h--) {
         const cmd = isObj(list[h]) ? (list[h] as Json).command : undefined;

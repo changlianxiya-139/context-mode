@@ -695,3 +695,29 @@ exit 0`);
   assert.equal(rm.exitCode, 0);
   assert.equal(readFileSync(file, "utf8"), raw, "rollback restores the bytes");
 });
+
+// CP-WIN-5 (D-HOOKFLAT-1): copilot-cli's context-mode.json is flat: hooks.<event>[] = {type,command,...}, with no inner
+// hooks array. A v1 hook command in a flat entry must be rewritten like one in a nested group. Runs on every OS.
+test("setup: copilot-cli flat hook file loses its v1 hook command and keeps the user entry (CP-WIN-5)", { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+  const s = sandbox(t);
+  const state = path.join(s.root, "copilot.state");
+  fakeBin(s.root, "copilot", `case "$1 $2" in\n  "mcp list") if [ -f "${state}" ]; then echo "context-mode"; fi ;;\n  "mcp add") touch "${state}" ;;\n  "mcp remove") rm -f "${state}" ;;\nesac\nexit 0`);
+  const v1 = { version: 1, hooks: {
+    sessionStart: [{ type: "command", command: "context-mode hook copilot-cli sessionStart" }, { type: "command", command: "my-own-hook" }],
+    sessionEnd: [{ type: "command", command: "my-own-end" }],
+  } };
+  const raw = JSON.stringify(v1, null, 2) + "\n";
+  const file = put(path.join(s.home, ".copilot", "hooks", "context-mode.json"), raw);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["copilot-cli"], runId: "r1" });
+  assert.equal(res.agents[0].status, "PASS", JSON.stringify(res.agents[0], null, 2));
+  const text = readFileSync(file, "utf8");
+  assert.equal(text.includes("context-mode hook copilot-cli"), false, "v1 command gone: " + text);
+  const doc = JSON.parse(text);
+  const start = doc.hooks.sessionStart.map((e) => e.command);
+  assert.ok(start.includes("my-own-hook"), "user entry stays");
+  assert.equal(start.filter((c) => c.includes("hook.mjs")).length, 1, "one v2 command, no duplicate: " + JSON.stringify(start));
+  assert.equal(doc.hooks.sessionEnd.some((e) => e.command === "my-own-end"), true);
+  const rm = await runRemove({ home: s.home, env: s.env, runId: "r1" });
+  assert.equal(rm.exitCode, 0, JSON.stringify(rm, null, 2));
+  assert.equal(readFileSync(file, "utf8"), raw, "remove gives the original bytes back");
+});
