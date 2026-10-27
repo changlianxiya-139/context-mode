@@ -99,7 +99,7 @@ phase('Final')
 const fin = await gate('az-final-gate', 'Final', true)
 const ci = await agent(`${base('az-ci')}\n\nRole: CI checker. gh run watch the latest ci.yml run on ${BR} (max 45 min). If red, fix the root cause, push, watch again (max 2 rounds). Report per OS and Node version.`,
   { label: 'az-ci', phase: 'Final', ...SNM })
-await agent(`${base('az-report')}\n\nRole: report writer. Write docs/v2/review/MORNING-REPORT.md on ${BR} (never at the repo root: build/check-removed.mjs allows only the target tree) (replace OVERNIGHT-REPORT.md content by moving it to docs/v2/review/OVERNIGHT-REPORT-2026-10-19.md). Short, plain words, tables:
+await agent(`${base('az-report')}\n\nRole: report writer. Write MORNING-REPORT.md at the repo root of ${BR} (replace OVERNIGHT-REPORT.md content by moving it to docs/v2/review/OVERNIGHT-REPORT-2026-10-19.md). Short, plain words, tables:
 1. Is ${BR} ready to merge? yes/no and why.
 2. Saving: M1, M2 per round and final (${JSON.stringify(saving && { best: saving.best, history: saving.history }).slice(0, 3000)}).
 3. Final A/B off/v1/v2: ${JSON.stringify(ab).slice(0, 1500)}
