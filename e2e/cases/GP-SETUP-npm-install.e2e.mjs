@@ -11,6 +11,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { vscodeMcpFile } from "../harness/vscode-user-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -142,7 +143,7 @@ test("[M6] GP-SETUP/npm-pack-install-setup-twice-remove: the packed npm bin sets
   writeJson(path.join(home, ".claude", "settings.json"), { model: "mine", ...v1Hooks("pretooluse", "claude-code") });
   writeJson(path.join(home, ".gemini", "settings.json"), { theme: "mine", ...v1Hooks("beforetool", "gemini-cli") });
   writeJson(path.join(home, ".config", "opencode", "opencode.json"), { theme: "mine" });
-  writeJson(path.join(home, ".vscode", "mcp.json"), { servers: { mine: { command: "x" } } });
+  writeJson(vscodeMcpFile(home, env), { servers: { mine: { command: "x" } } });
   const before = snapshot(home);
 
   // ---- setup ----

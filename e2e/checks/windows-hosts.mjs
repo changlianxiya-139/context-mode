@@ -17,6 +17,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readd
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { vscodeMcpFile } from "../harness/vscode-user-dir.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WIN = process.platform === "win32";
@@ -36,7 +37,7 @@ const HOSTS = [
   { id: "copilot-cli", bin: "copilot", pkg: "@github/copilot" },
   { id: "opencode", bin: "opencode", pkg: "opencode-ai" },
   { id: "pi", bin: "pi", pkg: "@earendil-works/pi-coding-agent" },
-  { id: "vscode", why: "VS Code is a desktop app; setup writes ~/.vscode/mcp.json and the Copilot hook file, no CLI" },
+  { id: "vscode", why: "VS Code is a desktop app; setup writes the user-profile mcp.json (Code/User) and the Copilot hook file, no CLI" },
   { id: "kiro", why: "Kiro CLI has no npm package; setup writes its config files" },
   { id: "zcode", why: "ZCode CLI has no npm package; setup writes its config file" },
 ];
@@ -216,7 +217,7 @@ function registeredHook(id, home, project, notes) {
 }
 
 /** The MCP server { command, args } from the host config, placeholders expanded. */
-function registeredServer(id, home, project, notes) {
+function registeredServer(id, home, project, notes, env = process.env) {
   const rootDir = ["claude-code", "gemini", "qwen"].includes(id) ? hostRoot(id, home, notes) : pkgDir;
   const vars = { "${CLAUDE_PLUGIN_ROOT}": rootDir, "${extensionPath}": rootDir, "${/}": path.sep, "${workspaceFolder}": project };
   const fix = (s) => ({ command: expand(s.command, vars), args: s.args.map((a) => expand(a, vars)) });
@@ -226,7 +227,7 @@ function registeredServer(id, home, project, notes) {
     case "qwen": return fix(readJson(path.join(rootDir, "qwen-extension.json")).mcpServers["context-mode"]);
     case "codex": return fix(tomlServer(path.join(process.env.CODEX_HOME || path.join(home, ".codex"), "config.toml")));
     case "copilot-cli": return fix(readJson(path.join(home, ".copilot", "mcp-config.json")).mcpServers["context-mode"]);
-    case "vscode": return fix(readJson(path.join(home, ".vscode", "mcp.json")).servers["context-mode"]);
+    case "vscode": return fix(readJson(vscodeMcpFile(home, env)).servers["context-mode"]);
     case "kiro": return fix(readJson(path.join(home, ".kiro", "settings", "mcp.json")).mcpServers["context-mode"]);
     case "zcode": return fix(readJson(path.join(home, ".zcode", "cli", "config.json")).mcp.servers["context-mode"]);
     case "opencode": {
@@ -335,7 +336,7 @@ function stepMcp(id, home, project, env) {
   const notes = [];
   return new Promise((resolve) => {
     let server;
-    try { server = registeredServer(id, home, project, notes); } catch (e) { record(id, "mcp", false, `config: ${e.message}`); return resolve(); }
+    try { server = registeredServer(id, home, project, notes, env); } catch (e) { record(id, "mcp", false, `config: ${e.message}`); return resolve(); }
     const note = `command=${server.command} ${server.args.join(" ").slice(0, 200)}${notes.length ? " NOTE " + notes.join("; ") : ""}`;
     let child; let buf = ""; let errBuf = ""; let done = false; const pending = new Map(); let nextId = 1;
     const finish = (ok, detail) => { if (done) return; done = true; clearTimeout(timer); try { child.kill(); } catch { /* gone */ } record(id, "mcp", ok, `${detail} | ${note}${ok ? "" : " stderr=" + tail(errBuf, 300)}`); resolve(); };

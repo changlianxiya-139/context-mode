@@ -6,7 +6,7 @@ import path from "node:path";
 import { ADAPTERS, getAdapter } from "../adapters/table.ts";
 import { AGENT_HOME_DIR, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
 import type { AgentId, AdapterRow, HostConfigFormat } from "../core/contracts/types.ts";
-import { claudeDirOf, copilotDirOf, opencodeDirOf } from "../core/project/config-dir.ts";
+import { claudeDirOf, copilotDirOf, opencodeDirOf, ownMcpFileOf } from "../core/project/config-dir.ts";
 import { HOOK_SHAPES, type JsonObject } from "./hook-shapes.ts";
 
 export const SERVER_BUNDLE = "server.mjs";
@@ -170,7 +170,7 @@ function configFor(ctx: SetupContext, id: AgentId): ConfigTarget | undefined {
   const [node, server, flag, agent] = serverCmd(ctx, id);
   const own = OWN_MCP_ENTRY[id];
   if (own) {
-    const file = agentPath(ctx, id, own.file);
+    const file = id === "vscode" ? ownMcpFileOf(id, own.file, ctx.env, ctx.home) : agentPath(ctx, id, own.file); // D-WIN-VSCODE-MCP-1
     const format: HostConfigFormat = file.endsWith(".toml") ? "toml" : id === "vscode" ? "jsonc" : "json";
     // D-HF-VSCODE-PROJECT-1: VS Code expands ${workspaceFolder} in MCP server args (VS Code MCP configuration
     // reference, predefined variables); the server reads the project from --workspace-folder (D-M1-5).

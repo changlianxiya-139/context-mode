@@ -25,7 +25,7 @@ To do the setup step by hand, run `context-mode setup --print vscode` and follow
 
 ## What setup changes
 
-- Adds the `context-mode` entry (key `servers`) to `~/.vscode/mcp.json`. Other servers stay.
+- Adds the `context-mode` entry (key `servers`) to the VS Code user-profile `mcp.json`. Other servers stay. Windows: `%APPDATA%\Code\User\mcp.json`. macOS: `~/Library/Application Support/Code/User/mcp.json`. Linux: `$XDG_CONFIG_HOME/Code/User/mcp.json`, else `~/.config/Code/User/mcp.json`.
 - Writes the hooks to `~/.copilot/hooks/context-mode-vscode.json` (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact).
 - Writes the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` to `~/.agents/skills/<name>/SKILL.md` (Copilot CLI keeps its own set in `~/.copilot/skills`, with its own tool name).
 - Effect: a large shell or read call is denied, and the reason names `ctx_execute` (deny + redirect).
@@ -51,7 +51,7 @@ It puts each touched file back. To remove the package too, see [Uninstall](./REA
 ## Known limits
 
 - Setup writes one hook file: `~/.copilot/hooks/context-mode-vscode.json`, shape `{ version: 1, hooks: { <Event>: [{ type: "command", command, timeout }] } }` with `version: 1`, `type: "command"` and `timeout` 5 (seconds), for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and PreCompact. The command is `"<node>" "<package>/hook.mjs" --agent vscode` (absolute paths). Other entries in that file stay. Setup does not write project hooks under `.github/hooks/`.
-- VS Code itself was not run, so no run showed that VS Code reads `.vscode/mcp.json` under the home folder.
+- VS Code itself was not run. The path follows the VS Code source (`userDataPath.ts`, default profile `mcp.json`); the docs page does not state it. Code - Insiders, VSCodium and named profiles are not written.
 - The shipped `hooks/vscode.json` is a template: the writer fills the path; do not copy hooks/vscode.json by hand.
 
 ## Report a problem
@@ -64,7 +64,7 @@ Tested on macOS (arm64), Node 26, a clean temporary HOME, the npm-packed build o
 
 | Command | VS Code (Copilot) version | Date | Result |
 |---|---|---|---|
-| `context-mode setup --yes --agents vscode` | not installed | 2026-10-23 | Pass: `~/.vscode/mcp.json` written |
+| `context-mode setup --yes --agents vscode` | not installed | 2026-10-23 | Pass: `~/.vscode/mcp.json` written (old path; later versions write the user-profile `mcp.json`) |
 | `context-mode setup --yes --agents vscode` (second run) | not installed | 2026-10-23 | Pass |
 | `context-mode doctor --agents vscode` | not installed | 2026-10-23 | Pass |
 | `context-mode setup --remove --yes` | not installed | 2026-10-23 | Pass: files restored (`Restored N file(s).`) |

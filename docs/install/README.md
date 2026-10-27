@@ -81,7 +81,7 @@ Each page gives one command, what setup changes, how to check it, how to remove 
 | OpenCode | [opencode.md](./opencode.md) | writes `opencode.json` (MCP and plugin), skills | yes, 1.19.4 |
 | Pi | [pi.md](./pi.md) | `pi install <package folder>` | yes, 1.4.0 |
 | Qwen Code | [qwen.md](./qwen.md) | `qwen extensions link` | yes, 0.26.0 |
-| VS Code (Copilot) | [vscode.md](./vscode.md) | writes `~/.vscode/mcp.json`, hooks and skills | config only: VS Code not run |
+| VS Code (Copilot) | [vscode.md](./vscode.md) | writes the user-profile `mcp.json` (`Code/User`), hooks and skills | config only: VS Code not run |
 | ZCode | [zcode.md](./zcode.md) | writes `~/.zcode/cli/config.json` (MCP and hooks), skills | config only: ZCode not installed |
 
 "Checked in a clean HOME" means the command ran on macOS with a temporary HOME against the npm-packed build, the agent CLI was installed in a temporary prefix, and setup, a second setup, doctor and remove all passed. It does not mean a logged-in agent session fired the hooks: no run did that. No page is checked on Windows.

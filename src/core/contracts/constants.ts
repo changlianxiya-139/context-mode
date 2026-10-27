@@ -563,6 +563,8 @@ export const CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR"; // D-WF-CC-CONFIG-1: C
 export const CODEX_HOME_ENV = "CODEX_HOME"; // D-N6-CODEX-HOME-2: Codex reads config.toml and hooks.json from here (default ~/.codex)
 export const COPILOT_HOME_ENV = "COPILOT_HOME"; // D-WIN-COPILOT-HOME-1: Copilot CLI replaces ~/.copilot as a whole with it (hooks/, skills/)
 export const OPENCODE_CONFIG_DIR_ENV = "OPENCODE_CONFIG_DIR"; // D-WIN-OPENCODE-DIR-1: OpenCode custom config dir (opencode.json, skills/)
+export const APPDATA_ENV = "APPDATA"; // D-WIN-VSCODE-MCP-1: Windows roaming app data; VS Code keeps its user dir under it
+export const VSCODE_USER_DIR_SEGMENTS = Object.freeze(["Code", "User"] as const); // D-WIN-VSCODE-MCP-1: <app data>/Code/User/{mcp.json,settings.json}
 export const XDG_CONFIG_HOME_ENV = "XDG_CONFIG_HOME"; // D-WIN-OPENCODE-DIR-1: OpenCode takes its global dir from xdg-basedir: $XDG_CONFIG_HOME/opencode, else ~/.config/opencode
 export const CONFIG_TOML_FILE = "config.toml"; // codex
 export const CONFIG_JSON_FILE = "config.json"; // zcode cli/
@@ -649,7 +651,7 @@ export const HOST_CONFIG_TEXT_PATH = "(given text)"; // CONFIG_PARSE_FAILED <pat
 export const JSON_INDENT_UNIT = "  "; // indent for a file with no indented member to copy from
 export const MCP_COMMAND_FIELD = "command";
 export const MCP_ARGS_FIELD = "args";
-// The one host config file (segments under $HOME) and key path of context-mode's own MCP entry, for the
+// The one host config file (segments under $HOME; VS Code: the name inside its user dir, ownMcpFileOf) and key path of context-mode's own MCP entry, for the
 // agents whose MCP entry lives in a host config file (installMode config-mcp, mcp-entry, hooks+mcp).
 // fields = host-required members of the entry next to command/args; also = sibling key paths the host needs set
 // for the entry to load. D-HF-ZCODE-SHAPE-1: ZCode CLI docs usage/07-mcp.md, mcp.servers.<name> {type:"stdio",
@@ -670,7 +672,7 @@ export const CODEX_APPROVAL_MODE_FIELD = "default_tools_approval_mode";
 export const CODEX_APPROVAL_APPROVE = "approve";
 export const OWN_MCP_ENTRY: Readonly<Partial<Record<AgentId, OwnMcpEntry>>> = Object.freeze({
   codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED, [CODEX_APPROVAL_MODE_FIELD]: CODEX_APPROVAL_APPROVE } },
-  vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
+  vscode: { file: [VSCODE_MCP_FILE], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
     file: [".zcode", "cli", "config.json"], key: ["mcp", "servers", SERVER_KEY],

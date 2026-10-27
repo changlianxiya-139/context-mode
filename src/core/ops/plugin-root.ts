@@ -9,7 +9,7 @@ import {
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow } from "../contracts/types.ts";
-import { claudeDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
+import { claudeDirOf, ownMcpFileOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig } from "./host-config.ts";
 
 type RootInput = Pick<AdapterRow, "id" | "installMode">;
@@ -36,7 +36,7 @@ function marketplaceRoot(adapter: RootInput, env: NodeJS.ProcessEnv): string {
 function configEntryRoot(adapter: RootInput, env: NodeJS.ProcessEnv): string {
   const spec = OWN_MCP_ENTRY[adapter.id];
   if (spec === undefined) throw missing(adapter.id, SERVER_KEY);
-  const file = join(requireHomeDir(env), ...spec.file);
+  const file = ownMcpFileOf(adapter.id, spec.file, env, requireHomeDir(env));
   if (!existsSync(file)) throw missing(adapter.id, file);
   const current = readHostConfig(adapter.id, file);
   const value = parseHostConfig(adapter.id, file, current.text, current.format);

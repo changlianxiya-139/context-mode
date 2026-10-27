@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 import { ADAPTERS } from "../../../src/adapters/table.ts";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
+import { vscodeUserDirOf } from "../../../src/core/project/config-dir.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..", "..", "..");
@@ -436,6 +437,12 @@ test("[M7] cli/pty-ctrl-c: Ctrl-C mid-apply exits 130 and leaves files byte-iden
 /** Absolute paths in --print output become <NODE>, <PKG>, <HOME> so one golden fits every machine. */
 function normPaths(text, s) {
   let t = text;
+  // D-WIN-VSCODE-MCP-1: VS Code's user dir differs per OS (%APPDATA%\\Code\\User, Library/Application Support/Code/User,
+  // ~/.config/Code/User). The golden holds the tag; the dir itself is asserted by tests/v2/project/vscode-user-dir.test.mjs.
+  for (const home of [realpathSync(s.home), s.home]) {
+    const dir = vscodeUserDirOf(s.env, home);
+    t = t.replaceAll(JSON.stringify(dir).slice(1, -1), "<VSCODE_USER>").replaceAll(dir, "<VSCODE_USER>");
+  }
   // The CLI finds its package dir through realpath (macOS: /var -> /private/var), so map that form first.
   for (const [p, tag] of [[realpathSync(s.pkg), "<PKG>"], [s.pkg, "<PKG>"], [realpathSync(s.home), "<HOME>"], [s.home, "<HOME>"], [process.execPath, "<NODE>"]]) {
     t = t.replaceAll(JSON.stringify(p).slice(1, -1), tag).replaceAll(p, tag);
@@ -446,8 +453,8 @@ function normPaths(text, s) {
   if (process.platform === "win32") {
     // The goldens hold the POSIX form. On Windows the same step has `\` (`\\` inside TOML/JSON strings) after a
     // tag, and shellWord single-quotes a word with a backslash. Map both back; the product output is right as is.
-    t = t.replace(/(<(?:PKG|NODE|HOME)>)((?:\\{1,2}[^\s"'\\]+)+)/g, (_m, tag, rest) => tag + rest.replace(/\\{1,2}/g, "/"));
-    t = t.replace(/'(<(?:PKG|NODE|HOME)>[^'\s]*)'/g, "$1");
+    t = t.replace(/(<(?:PKG|NODE|HOME|VSCODE_USER)>)((?:\\{1,2}[^\s"'\\]+)+)/g, (_m, tag, rest) => tag + rest.replace(/\\{1,2}/g, "/"));
+    t = t.replace(/'(<(?:PKG|NODE|HOME|VSCODE_USER)>[^'\s]*)'/g, "$1");
   }
   return t;
 }

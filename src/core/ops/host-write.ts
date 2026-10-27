@@ -9,7 +9,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
 import { type AtomicOptions, removeTmpFile, renameWithRetry, replaceFailure, unlinkWithRetry } from "./atomic-file.ts";
-import { opencodeDirOf, piAgentDirOf } from "../project/config-dir.ts";
+import { opencodeDirOf, ownMcpFileOf, piAgentDirOf } from "../project/config-dir.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 import { withLayout } from "./host-text.ts";
 
@@ -27,7 +27,7 @@ function defaultWrite(file: string, text: string): void {
  *  with the release, D-M5-O1-4): null. */
 export function hostConfigPath(agent: AgentId, home: string, env: NodeJS.ProcessEnv): string | null {
   const own = OWN_MCP_ENTRY[agent];
-  if (own !== undefined) return join(home, ...own.file);
+  if (own !== undefined) return ownMcpFileOf(agent, own.file, env, home);
   switch (agent) {
     case "opencode": return join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE); // D-WIN-OPENCODE-DIR-1
     case "pi": return join(piAgentDirOf(env, home), SETTINGS_FILE);

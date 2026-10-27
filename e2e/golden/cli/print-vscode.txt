@@ -1,4 +1,4 @@
-Manual setup for vscode. Put this in <HOME>/.vscode/mcp.json
+Manual setup for vscode. Put this in <VSCODE_USER>/mcp.json
 (If the folder or file is missing, create it. If the file exists, add the context-mode entry
 and keep the rest. These paths are for this machine.)
 

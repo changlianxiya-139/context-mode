@@ -2,8 +2,8 @@
 // The one config-dir reader: every module gets ~/.context-mode from here, none reads HOME again.
 // D-CI-PERF-3: node:fs through getBuiltinModule; a static ESM import of node:fs also loads fs/promises, readline and streams.
 const { mkdirSync, realpathSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
-import { join } from "node:path";
-import { AGENT_HOME_DIR, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, COPILOT_HOME_ENV, DATA_ROOT, OPENCODE_CONFIG_DIR_ENV, PI_AGENT_DIR, PI_AGENT_DIR_ENV, XDG_CONFIG_HOME_ENV } from "../contracts/constants.ts";
+import { join, posix, win32 } from "node:path";
+import { AGENT_HOME_DIR, APPDATA_ENV, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, COPILOT_HOME_ENV, DATA_ROOT, OPENCODE_CONFIG_DIR_ENV, PI_AGENT_DIR, PI_AGENT_DIR_ENV, VSCODE_USER_DIR_SEGMENTS, XDG_CONFIG_HOME_ENV } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 
 /** The one home rule. An empty value counts as unset; null when nothing is set (D-M3-F-8).
@@ -60,6 +60,25 @@ export function opencodeDirOf(env: NodeJS.ProcessEnv, home: string): string {
 export function piAgentDirOf(env: NodeJS.ProcessEnv, home: string): string {
   const dir = env[PI_AGENT_DIR_ENV];
   return dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR.pi, PI_AGENT_DIR);
+}
+
+/** D-WIN-VSCODE-MCP-1: the VS Code user-profile dir (default profile, holds mcp.json and settings.json). Rule of VS Code's
+ *  userDataPath.ts: win32 %APPDATA% (else <home>\\AppData\\Roaming), darwin <home>/Library/Application Support, other
+ *  $XDG_CONFIG_HOME (else <home>/.config); then Code/User. An empty value counts as unset. ~/.vscode is the extensions dir.
+ *  `platform` is a parameter so the rule is tested on every OS; the path flavour follows it. */
+export function vscodeUserDirOf(env: NodeJS.ProcessEnv, home: string, platform: NodeJS.Platform = process.platform): string {
+  const set = (v: string | undefined): v is string => v !== undefined && v !== "";
+  const p = platform === "win32" ? win32 : posix;
+  if (platform === "win32") return p.join(set(env[APPDATA_ENV]) ? env[APPDATA_ENV] : p.join(home, "AppData", "Roaming"), ...VSCODE_USER_DIR_SEGMENTS);
+  if (platform === "darwin") return p.join(home, "Library", "Application Support", ...VSCODE_USER_DIR_SEGMENTS);
+  return p.join(set(env[XDG_CONFIG_HOME_ENV]) ? env[XDG_CONFIG_HOME_ENV] : p.join(home, ".config"), ...VSCODE_USER_DIR_SEGMENTS);
+}
+
+/** D-WIN-VSCODE-MCP-1: the host file holding an agent's own MCP entry. `file` is OWN_MCP_ENTRY[agent].file: segments under
+ *  <home>, except VS Code, whose file name sits in the user-profile dir. The one place setup, doctor, upgrade, uninstall
+ *  and plugin-root get this path. */
+export function ownMcpFileOf(agent: string, file: readonly string[], env: NodeJS.ProcessEnv, home: string): string {
+  return agent === "vscode" ? join(vscodeUserDirOf(env, home), ...file) : join(home, ...file);
 }
 
 /** The one "home or fail" helper (D-WIN-HOME-3): setup, doctor, upgrade, uninstall, plugin-root and the store all call this.

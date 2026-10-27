@@ -14,7 +14,7 @@ import {
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow, AgentId, ProjectContext, UpgradeChangeRow } from "../contracts/types.ts";
 import { isInside } from "../project/contain.ts";
-import { opencodeDirOf, piAgentDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
+import { opencodeDirOf, ownMcpFileOf, piAgentDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { listLiveOwners } from "../store/owners.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig, writeHostConfigEdit } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -120,7 +120,7 @@ function ownEntries(agent: AgentId, env: NodeJS.ProcessEnv): OwnEntry[] {
       return { ...o, [path[0]]: without(o[path[0]], path.slice(1)) };
     };
     return [{
-      file: join(home, ...mcp.file),
+      file: ownMcpFileOf(agent, mcp.file, env, home),
       key: top,
       shown: mcp.key.join(V1_KEY_PATH_SEP),
       has: (v) => { const h = holder(v); return isObj(h) && Object.hasOwn(h, own); },

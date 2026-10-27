@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { spawnBundle } from "../harness/mcp-client.mjs";
+import { vscodeMcpFile } from "../harness/vscode-user-dir.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_BUNDLE = path.join(path.resolve(__dirname, "..", ".."), "release-out", "server.mjs");
@@ -34,7 +35,7 @@ function walkFiles(dir) {
 
 // Each agent: the host settings dir the install writes into, and one user key placed there before install.
 const AGENTS = [
-  { agent: "vscode", file: [".vscode", "mcp.json"], user: { servers: { mine: { command: "x" } }, theme: "dark" } },
+  { agent: "vscode", file: null, user: { servers: { mine: { command: "x" } }, theme: "dark" } },
   { agent: "claude-code", file: [".claude", "settings.json"], user: { model: "mine", env: { KEEP: "1" } } },
 ];
 
@@ -43,7 +44,7 @@ for (const { agent, file, user } of AGENTS) {
     const home = mkdtempSync(path.join(tmpdir(), "cm-gp1u-home-"));
     const repo = mkdtempSync(path.join(tmpdir(), "cm-gp1u-repo-"));
     execFileSync("git", ["init", "-q"], { cwd: repo });
-    const settings = path.join(home, ...file);
+    const settings = file === null ? vscodeMcpFile(home, process.env) : path.join(home, ...file);
     mkdirSync(path.dirname(settings), { recursive: true });
     writeFileSync(settings, JSON.stringify(user, null, 2), "utf8");
     const env = { ...process.env, HOME: home, USERPROFILE: home, TMPDIR: home, CLAUDE_PROJECT_DIR: repo };

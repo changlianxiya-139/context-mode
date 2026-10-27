@@ -15,7 +15,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, DoctorRow } from "../contracts/types.ts";
 import { hasReplace } from "../../adapters/table.ts";
-import { codexDirOf, copilotDirOf, homeDirOf, opencodeDirOf, piAgentDirOf } from "../project/config-dir.ts";
+import { codexDirOf, copilotDirOf, homeDirOf, opencodeDirOf, ownMcpFileOf, piAgentDirOf } from "../project/config-dir.ts";
 import { detectV1, type V1Scope } from "./detect-v1.ts";
 import { hostConfigValueAt, mergeOwnEntries, parseHostConfig, readHostConfig } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -119,7 +119,7 @@ const validTimeout = (v: unknown): boolean => typeof v === "number" && Number.is
 function mcpFile(row: AdapterRow, home: string, env: NodeJS.ProcessEnv): string | null {
   const spec = OWN_MCP_ENTRY[row.id];
   if (row.id === "codex") return join(codexDirOf(env, home), CONFIG_TOML_FILE); // D-N6-CODEX-HOME-2
-  if (spec !== undefined) return join(home, ...spec.file);
+  if (spec !== undefined) return ownMcpFileOf(row.id, spec.file, env, home);
   if (row.id === "opencode") return join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE); // D-WIN-OPENCODE-DIR-1
   if (row.id === "pi") {
     return join(piAgentDirOf(env, home), SETTINGS_FILE);
