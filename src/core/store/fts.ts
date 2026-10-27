@@ -305,16 +305,26 @@ const TYPO_MIN_LEN = 5;
 const TYPO_MAX_DIST = 2;
 function typoTerms(db: DbHandle, words: string[]): string[] | null {
   const has = stmt(db.raw, "SELECT 1 AS x FROM chunks_vocab WHERE term = ?");
-  const near = stmt(db.raw, "SELECT term, doc FROM chunks_vocab WHERE length(term) BETWEEN ? AND ?");
+  // D-HQ-PERF-2: chunks_vocab has no index on length(term), so each read walks the whole porter vocabulary.
+  // One read covers every missing stem's length window; each stem then keeps the rows of its own window
+  // (same candidates, same term order as one read per stem).
+  const near = stmt(db.raw, "SELECT term, doc, length(term) AS n FROM chunks_vocab WHERE length(term) BETWEEN ? AND ?");
+  const stems = queryStems(words.join(" "));
+  const miss = stems.map((stem) => has.get(stem) === undefined && [...stem].length >= TYPO_MIN_LEN);
+  if (!miss.includes(true)) return null;
+  const lens = stems.filter((_, i) => miss[i]).map((stem) => stem.length);
+  const rows = near.all(Math.min(...lens) - TYPO_MAX_DIST, Math.max(...lens) + TYPO_MAX_DIST) as unknown as Array<{ term: string; doc: number; n: number }>;
   let changed = false;
   const out: string[] = [];
-  for (const stem of queryStems(words.join(" "))) {
-    if (has.get(stem) !== undefined || [...stem].length < TYPO_MIN_LEN) {
+  stems.forEach((stem, i) => {
+    if (!miss[i]) {
       out.push(stem);
-      continue;
+      return;
     }
     let best: { term: string; d: number; doc: number } | null = null;
-    for (const r of near.all(stem.length - TYPO_MAX_DIST, stem.length + TYPO_MAX_DIST) as unknown as Array<{ term: string; doc: number }>) {
+    for (const r of rows) {
+      const n = Number(r.n);
+      if (n < stem.length - TYPO_MAX_DIST || n > stem.length + TYPO_MAX_DIST) continue;
       const d = editDistance(stem, r.term, TYPO_MAX_DIST);
       if (d > TYPO_MAX_DIST) continue;
       if (best === null || d < best.d || (d === best.d && (r.doc > best.doc || (r.doc === best.doc && r.term < best.term)))) {
@@ -325,7 +335,7 @@ function typoTerms(db: DbHandle, words: string[]): string[] | null {
       out.push(best.term);
       changed = true;
     }
-  }
+  });
   return changed ? out.map((t) => `"${t.replaceAll('"', '""')}"*`) : null;
 }
 

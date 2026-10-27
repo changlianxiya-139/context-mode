@@ -560,3 +560,31 @@ test("[perf-P1] ftsQuery ranks scope session/worktree by BM25 with no window sor
   for (const scope of ["session", "worktree"]) assert.ok(!porterRankSql(scope).includes(" OVER "), scope + " runs a window sort");
   assert.ok(porterRankSql("project").includes(" OVER "), "project lost its RRF ranks");
 });
+
+// D-HQ-PERF-2: a chunks_vocab read walks the whole porter index (no index on length(term)); profile of
+// GP-SEARCH held-out showed the two-typo query paying one walk per misspelled stem. One walk per pass.
+test("[perf-P2] typo correction reads chunks_vocab once per pass, however many stems miss (D-HQ-PERF-2)", async () => {
+  const { db, root, project } = await freshDb("p2".repeat(8));
+  try {
+    const id = ftsInsert(db, src({ sessionId: "s1", worktree: project.worktree }), [{ ord: 0, text: "Open a connection to the PostgreSQL database", bytes: 44 }]);
+    ftsInsert(db, src({ sessionId: "s1", worktree: project.worktree }), [{ ord: 0, text: "unrelated words only", bytes: 20 }]);
+    let walks = 0;
+    const raw = db.raw;
+    const counted = new Proxy(raw, {
+      get(target, key) {
+        if (key !== "prepare") { const v = Reflect.get(target, key, target); return typeof v === "function" ? v.bind(target) : v; }
+        return (sql) => {
+          const st = target.prepare(sql);
+          if (!sql.includes("chunks_vocab") || sql.includes("term = ?")) return st;
+          return { all: (...a) => { walks++; return st.all(...a); }, get: (...a) => { walks++; return st.get(...a); } };
+        };
+      },
+    });
+    const hits = ftsQuery({ ...db, raw: counted }, "postgress conection", "session", project, "s1", 10, 0);
+    assert.deepEqual(hits.map((h) => h.sourceId), [id]);
+    assert.equal(walks, 1, "chunks_vocab walks for two misspelled stems");
+  } finally {
+    closeDb(db);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
