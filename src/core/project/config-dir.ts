@@ -3,7 +3,7 @@
 // D-CI-PERF-3: node:fs through getBuiltinModule; a static ESM import of node:fs also loads fs/promises, readline and streams.
 const { mkdirSync, realpathSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
 import { join, posix, win32 } from "node:path";
-import { AGENT_HOME_DIR, APPDATA_ENV, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, COPILOT_HOME_ENV, DATA_ROOT, OPENCODE_CONFIG_DIR_ENV, PI_AGENT_DIR, PI_AGENT_DIR_ENV, VSCODE_USER_DIR_SEGMENTS, XDG_CONFIG_HOME_ENV } from "../contracts/constants.ts";
+import { AGENT_HOME_DIR, APPDATA_ENV, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, COPILOT_HOME_ENV, DATA_ROOT, KIRO_HOME_ENV, OPENCODE_CONFIG_DIR_ENV, PI_AGENT_DIR, PI_AGENT_DIR_ENV, VSCODE_USER_DIR_SEGMENTS, XDG_CONFIG_HOME_ENV } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 
 /** The one home rule. An empty value counts as unset; null when nothing is set (D-M3-F-8).
@@ -35,6 +35,23 @@ export function codexDirOf(env: NodeJS.ProcessEnv, home: string): string {
 export function copilotDirOf(env: NodeJS.ProcessEnv, home: string): string {
   const dir = env[COPILOT_HOME_ENV];
   return dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR["copilot-cli"]);
+}
+
+/** D-WIN-KIRO-HOME-1: the dir Kiro CLI V3 reads hooks/, settings/mcp.json, skills/ and agents/ from: $KIRO_HOME when it is an
+ *  absolute path that is not a filesystem root, not the home dir and not an ancestor of it (kiro.dev/docs/reference/settings),
+ *  else <home>/.kiro. Any other value (empty, relative, drive-less on win32) is ignored by Kiro, so it is ignored here.
+ *  `platform` is a parameter so the rule is tested on every OS. */
+export function kiroDirOf(env: NodeJS.ProcessEnv, home: string, platform: NodeJS.Platform = process.platform): string {
+  const p = platform === "win32" ? win32 : posix;
+  const fallback = p.join(home, ...AGENT_HOME_DIR.kiro);
+  const dir = env[KIRO_HOME_ENV];
+  if (dir === undefined || dir === "" || !p.isAbsolute(dir)) return fallback;
+  if (platform === "win32" && p.parse(dir).root.length < 2) return fallback; // "\\kiro" has no drive: relative to the current drive
+  const abs = p.resolve(dir);
+  if (p.dirname(abs) === abs) return fallback; // a filesystem root
+  const up = p.relative(abs, p.resolve(home)); // "" = home itself; no leading ".." = home sits inside dir, so dir is an ancestor
+  if (!p.isAbsolute(up) && up.split(p.sep)[0] !== "..") return fallback;
+  return dir;
 }
 
 /** D-WF-CC-CONFIG-1: the dir Claude Code keeps settings.json, plugins/ and agents/ in: $CLAUDE_CONFIG_DIR when set and
@@ -78,6 +95,7 @@ export function vscodeUserDirOf(env: NodeJS.ProcessEnv, home: string, platform: 
  *  <home>, except VS Code, whose file name sits in the user-profile dir. The one place setup, doctor, upgrade, uninstall
  *  and plugin-root get this path. */
 export function ownMcpFileOf(agent: string, file: readonly string[], env: NodeJS.ProcessEnv, home: string): string {
+  if (agent === "kiro") return join(kiroDirOf(env, home), ...file.slice(1)); // D-WIN-KIRO-HOME-1: file = [".kiro", ...]
   return agent === "vscode" ? join(vscodeUserDirOf(env, home), ...file) : join(home, ...file);
 }
 

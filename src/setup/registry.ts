@@ -6,7 +6,7 @@ import path from "node:path";
 import { ADAPTERS, getAdapter } from "../adapters/table.ts";
 import { AGENT_HOME_DIR, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
 import type { AgentId, AdapterRow, HostConfigFormat } from "../core/contracts/types.ts";
-import { claudeDirOf, copilotDirOf, opencodeDirOf, ownMcpFileOf } from "../core/project/config-dir.ts";
+import { claudeDirOf, copilotDirOf, kiroDirOf, opencodeDirOf, ownMcpFileOf } from "../core/project/config-dir.ts";
 import { HOOK_SHAPES, type JsonObject } from "./hook-shapes.ts";
 
 export const SERVER_BUNDLE = "server.mjs";
@@ -59,6 +59,7 @@ const CODEX_CONFIG_FILE = "config.toml";
 const CODEX_HOME_ENV = "CODEX_HOME";
 const CODEX_DIR = ".codex";
 const COPILOT_DIR = ".copilot";
+const KIRO_DIR = AGENT_HOME_DIR.kiro[0];
 const OPENCODE_HOME_SEGS = AGENT_HOME_DIR.opencode;
 
 /** D-N5-CODEX-HOME-1: a path under HOME as the agent reads it. Codex reads config.toml, hooks.json and skills/
@@ -69,6 +70,8 @@ function agentPath(ctx: SetupContext, id: AgentId, rel: string | readonly string
   if (id === "codex" && segs[0] === CODEX_DIR && codexHome !== undefined && codexHome !== "") return path.join(codexHome, ...segs.slice(1));
   // D-WIN-COPILOT-HOME-1: Copilot CLI only; VS Code's hook file also sits under .copilot/ but VS Code does not read COPILOT_HOME.
   if (id === "copilot-cli" && segs[0] === COPILOT_DIR) return path.join(copilotDirOf(ctx.env, ctx.home), ...segs.slice(1));
+  // D-WIN-KIRO-HOME-1: Kiro V3 takes its global dir from $KIRO_HOME (absolute, not root/home/ancestor), else ~/.kiro.
+  if (id === "kiro" && segs[0] === KIRO_DIR) return path.join(kiroDirOf(ctx.env, ctx.home), ...segs.slice(1));
   // D-WIN-OPENCODE-DIR-1: OpenCode's dir is $OPENCODE_CONFIG_DIR, else $XDG_CONFIG_HOME/opencode, else ~/.config/opencode.
   if (id === "opencode" && segs[0] === OPENCODE_HOME_SEGS[0] && segs[1] === OPENCODE_HOME_SEGS[1]) return path.join(opencodeDirOf(ctx.env, ctx.home), ...segs.slice(2));
   return path.join(ctx.home, ...segs);
