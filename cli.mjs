@@ -240,6 +240,9 @@ var PLAIN_OUTPUT_ENV = Object.freeze({ NO_COLOR: "1", FORCE_COLOR: "0" });
 var HOST_SESSION_ENV = Object.freeze({ "claude-code": "CLAUDE_CODE_SESSION_ID" });
 var NODE_MIN = "24.15.0";
 var DATA_ROOT = "~/.context-mode";
+var HOST_CONFIG_DIR_NAME = ".claude";
+var HOST_PLUGINS_DIR_NAME = "plugins";
+var INSTALLED_PLUGINS_FILE = "installed_plugins.json";
 var MCP_HINT_EVERY_DEFAULT = 10;
 function readHintEvery(raw) {
   if (raw === void 0 || raw.trim() === "") return MCP_HINT_EVERY_DEFAULT;
@@ -1292,7 +1295,7 @@ function suggest(word, candidates) {
   return bestD <= Math.max(2, Math.floor(word.length / 3)) ? ` Did you mean "${best}"?` : "";
 }
 function parseFlags(cmd, argv) {
-  const f2 = { help: false, json: false, yes: false, noInput: false, dryRun: false, debug: false, quiet: false, verbose: false, noColor: false, list: false, remove: false, repair: false, tag: "latest" };
+  const f2 = { help: false, json: false, yes: false, noInput: false, dryRun: false, debug: false, quiet: false, verbose: false, noColor: false, list: false, remove: false, repair: false };
   for (let i2 = 0; i2 < argv.length; i2++) {
     const raw = argv[i2];
     const eq = raw.startsWith("--") ? raw.indexOf("=") : -1;
@@ -1445,7 +1448,7 @@ Examples:
 Run npm i -g context-mode@<tag>, then the new version runs context-mode setup --repair.
 
 Options:
-  --tag <tag>        npm dist-tag or version to install (default: latest)
+  --tag <tag>        npm dist-tag or version to install (default: the dist-tag of this version)
   --dry-run          Print the commands; run nothing
 ${COMMON_HELP}
 ${EXIT_CODES}
@@ -5237,6 +5240,11 @@ function cliFor(ctx, id) {
       return void 0;
   }
 }
+function copyFor(ctx, id) {
+  if (id !== "claude-code") return void 0;
+  const file = path2.join(ctx.home, HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE);
+  return { host: "Claude Code", bin: "claude", plugin: PLUGIN_ID, file, refresh: ["plugin", "update", PLUGIN_ID] };
+}
 var LIST = {
   "claude-code": { bin: "claude", args: ["plugin", "list"] },
   codex: { bin: "codex", args: ["mcp", "list"] },
@@ -5323,6 +5331,8 @@ function buildRegistry(ctx) {
       goldenPayload: golden(row, ctx.home)
     };
     if (row.installMode !== "in-process") out2.hookCommand = hookCommand;
+    const copy = copyFor(ctx, id);
+    if (copy) out2.copy = copy;
     return out2;
   });
 }
@@ -5694,7 +5704,7 @@ function planSkills(row, edits) {
     if (before !== after) edits.push({ file: f2.file, before, after, changes: [{ file: f2.file, path: f2.name, before: before === void 0 ? null : "old", after: "SKILL.md" }] });
   }
 }
-function planRow(row, listed) {
+function planRow(row, listed, stale) {
   const edits = [];
   if (row.config) {
     const c3 = row.config;
@@ -5715,7 +5725,8 @@ function planRow(row, listed) {
   planHookInstall(row, edits);
   planSkills(row, edits);
   const cli = row.config || !row.cli || listed ? [] : row.cli.install;
-  return { edits, cli };
+  const refresh = listed && stale && row.copy ? [row.copy.refresh] : [];
+  return { edits, cli, refresh };
 }
 function listCheck(row, env) {
   const l2 = row.listCommand;
@@ -5723,6 +5734,33 @@ function listCheck(row, env) {
   const r2 = runBin(l2.bin, l2.args, env);
   const ok = r2.status === 0 && `${r2.stdout}${r2.stderr}`.includes("context-mode");
   return { name: "list", ok, detail: ok ? void 0 : `${l2.bin} ${l2.args.join(" ")} does not list context-mode` };
+}
+function packageVersion(pkgDir) {
+  try {
+    const v = JSON.parse(readFileSync3(path5.join(pkgDir, "package.json"), "utf8")).version;
+    return typeof v === "string" ? v : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function copyCheck(row, pkgDir) {
+  const c3 = row.copy;
+  const pkg = packageVersion(pkgDir);
+  const text2 = c3 ? readOr(c3.file) : void 0;
+  if (!c3 || pkg === void 0 || text2 === void 0) return void 0;
+  let entries;
+  try {
+    const doc = JSON.parse(text2);
+    entries = isObj3(doc) && isObj3(doc.plugins) ? doc.plugins[c3.plugin] : void 0;
+  } catch {
+    return { name: "copy", ok: false, detail: `${c3.file} is not valid JSON; run ${c3.bin} ${c3.refresh.join(" ")}` };
+  }
+  if (!Array.isArray(entries)) return void 0;
+  const versions = entries.filter(isObj3).map((e) => e.version).filter((v) => typeof v === "string");
+  if (!versions.length) return void 0;
+  const old = versions.find((v) => v !== pkg);
+  if (old === void 0) return { name: "copy", ok: true };
+  return { name: "copy", ok: false, detail: `${c3.host} runs context-mode ${old}, the installed package is ${pkg}; run ${c3.bin} ${c3.refresh.join(" ")}` };
 }
 function mcpCheck(cmd, env) {
   return new Promise((resolve) => {
@@ -5902,6 +5940,8 @@ async function verifyRow(row, ctx) {
   const checks = [parseCheck(row)];
   const l2 = listCheck(row, env);
   if (l2) checks.push(l2);
+  const cp = copyCheck(row, ctx.pkgDir);
+  if (cp) checks.push(cp);
   checks.push(await mcpCheck(row.serverCommand, env));
   if (row.hookCommand) checks.push(hookCheck(row, env));
   checks.push(hookRegisteredCheck(row, env, l2), hookRunsCheck(row, env), hookSeenCheck(row, ctx.home), skillsCheck(row, ctx.pkgDir));
@@ -6026,13 +6066,13 @@ async function setupRow(row, ctx, run, dryRun) {
   let plan;
   try {
     const listed = needsBin ? listCheck(row, ctx.env)?.ok === true : false;
-    plan = planRow(row, listed);
+    plan = planRow(row, listed, copyCheck(row, ctx.pkgDir)?.ok === false);
   } catch (e) {
     return { ...res, status: "FAIL", reason: e.message };
   }
   const configEdited = (file) => plan.edits.some((e) => e.file === file && e.changes.some((c3) => !isTrust(row, c3)));
   res.v1 = detectV1(row.id, ctx.home).filter((f2) => !(row.config && f2.file === row.config.file && !configEdited(f2.file)));
-  res.changes = [...plan.edits.flatMap((e) => e.changes), ...plan.cli.map((args) => ({ command: [row.cli.bin, ...args] }))];
+  res.changes = [...plan.edits.flatMap((e) => e.changes), ...[...plan.cli, ...plan.refresh].map((args) => ({ command: [row.cli.bin, ...args] }))];
   if (dryRun) return res;
   try {
     for (const e of plan.edits) {
@@ -6045,6 +6085,11 @@ async function setupRow(row, ctx, run, dryRun) {
       if (r2.status !== 0) throw new Error(`${row.cli.bin} ${args.join(" ")} exited ${r2.status}: ${`${r2.stderr}`.trim()}`);
     }
     if (plan.cli.length) for (const args of row.cli.remove) run.record({ agent: row.id, undo: { bin: row.cli.bin, args } });
+    for (const args of plan.refresh) {
+      const r2 = runBin(row.cli.bin, args, ctx.env);
+      if (r2.status !== 0) throw new Error(`${row.cli.bin} ${args.join(" ")} exited ${r2.status}: ${`${r2.stderr}`.trim()}`);
+      run.record({ agent: row.id, ran: { bin: row.cli.bin, args } });
+    }
     res.checks = await verifyRow(row, ctx);
     const bad = res.checks.filter((c3) => !c3.ok);
     if (bad.length) throw new Error(bad.map((c3) => `${c3.name}: ${c3.detail}`).join("; "));
@@ -6095,7 +6140,11 @@ async function runDoctor(opts) {
   return { exitCode: agents.some((a2) => a2.status === "FAIL") ? 1 : 0, agents };
 }
 function onlyTrust(row, changes) {
-  return changes.every((c3) => isTrust(row, c3));
+  return changes.every((c3) => isTrust(row, c3) || isRefresh(row, c3));
+}
+function isRefresh(row, c3) {
+  const r2 = row.copy;
+  return r2 !== void 0 && c3.command !== void 0 && c3.command.join(" ") === [r2.bin, ...r2.refresh].join(" ");
 }
 function isTrust(row, c3) {
   const h2 = row.hookInstall;
@@ -6527,10 +6576,16 @@ async function doctor(ui) {
   }
   return worst;
 }
+function channelOf(version) {
+  const dash = version.indexOf("-");
+  if (dash < 0) return "latest";
+  const pre = version.slice(dash + 1).split(".")[0];
+  return pre === "" ? "latest" : pre;
+}
 async function upgrade(ui) {
   const { f: f2 } = ui;
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const spec = `context-mode@${f2.tag}`;
+  const spec = `context-mode@${f2.tag ?? channelOf(ui.env.version)}`;
   const install = `npm i -g ${spec}`;
   const agentArgs = f2.agents ? ["--agents", f2.agents.join(",")] : [];
   const repairArgs = ["setup", "--repair", "--yes", ...agentArgs, ...f2.json ? ["--json"] : [], ...f2.quiet ? ["--quiet"] : []];
