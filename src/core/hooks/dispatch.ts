@@ -33,6 +33,7 @@ import { moreLine, selectChunksInMemory } from "../index/select.ts";
 import { shapeDigest } from "../index/shape.ts";
 import { indexText } from "../index/text.ts";
 import { appendDetached } from "./detached.ts";
+import { askedWords } from "./handle-query.ts";
 import { answerDecisions, askOptionLabels, optionEchoDecision, type DecisionPart } from "./decision.ts";
 import { shouldHint } from "./throttle.ts";
 
@@ -431,7 +432,8 @@ async function postToolUse(ev: CanonicalHookEvent, row: AdapterRow, project: Pro
   // D-CR3-HANDLE-1: one handle line replaces the more line and counts inside the budget. The budget per
   // replace is the size bound of D-CR3-HANDLE-1 (REPLACE_RETURN_BYTES of selection + the more line with the full
   // label); the selection gets that budget minus the handle line, so a replace never grows.
-  const handleLine = REPLACE_HANDLE_LINE(intent, handle, result.bytes, row.toolNamePrefix);
+  // D-HA-GEMINI-HINT-1: a second query of the prompt words the output holds, so the call returns the asked line.
+  const handleLine = REPLACE_HANDLE_LINE(intent, handle, result.bytes, row.toolNamePrefix, askedWords(intent, prompt, text));
   const budget = replaceBudget(handleLine, moreLine(intent, label));
   const digest = shapeDigest(text, rankQuery ?? intent, SHAPE_RETURN_BYTES); // D-M2-JSON-1
   if (digest !== null) return { kind: "replace", output: replaceOutput(digest, handleLine) };
