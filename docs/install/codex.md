@@ -57,8 +57,8 @@ It puts each touched file back. To remove the package too, see [Uninstall](./REA
 
 ## Known limits
 
-- On a fresh HOME setup does not create `~/.codex/hooks.json`. It writes only `config.toml`, so a new Codex install has the MCP server and no hooks (see [Verified](#verified), clean-HOME run).
-- A Codex plugin install does not work yet: there is no `.agents/plugins/marketplace.json`.
+- After `codex plugin add`, `context-mode doctor` checks the plugin (`codex plugin list` shows it enabled) and setup writes nothing under `~/.codex`, so the hooks never run twice (D-NI-CODEX-DOCTOR-1).
+- Codex 0.156.1 reads a local marketplace folder only when it is a git repo.
 - The shipped `hooks/codex.json` is a template: the writer fills the path; do not copy hooks/codex.json by hand.
 
 ## Report a problem
@@ -71,6 +71,8 @@ Tested on macOS (arm64), Node 26, a clean temporary HOME, the npm-packed build o
 
 | Command | Codex version | Date | Result |
 |---|---|---|---|
+| `codex plugin marketplace add <npm-packed dir>` + `codex plugin add context-mode@context-mode` | 0.156.1 | 2026-10-25 | Pass: `codex plugin list` shows installed, enabled; `codex mcp list` shows context-mode enabled |
+| `context-mode doctor --agents codex` after the plugin install | 0.156.1 | 2026-10-25 | Pass: list, mcp, hook, hook-registered, hook-runs, skills (hook-seen WARN) |
 | `context-mode setup --yes --agents codex` | 0.164.0 | 2026-10-23 | Pass: `~/.codex/config.toml` written |
 | `context-mode setup --yes --agents codex` (second run) | 0.164.0 | 2026-10-23 | Pass |
 | `context-mode doctor --agents codex` | 0.164.0 | 2026-10-23 | Pass |
