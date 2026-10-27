@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -128,5 +128,24 @@ test("[M5] release-fetch/stale-fetch-dir-of-same-pid-is-replaced", async (t) => 
   const r = await fetchRelease("pi", url, envFor(home), new AbortController().signal);
   assert.equal(r.sha, sha);
   assert.equal(existsSync(path.join(r.dir, "junk")), false);
+  assert.deepEqual(readdirSync(agentDir(home, "pi")), [sha]);
+});
+
+// DEVIATIONS D-WIN-ATOMIC-2: the final .fetch-<pid> -> <sha> dir rename fails with EPERM on Windows while
+// antivirus scans the fresh clone. Fake platform + injected rename: runs on every OS.
+test("[win] release-fetch/retries-EPERM-on-dir-rename", async (t) => {
+  const root = tmp(t);
+  const { url, sha } = fixtureRepo(root, "release");
+  const home = path.join(root, "home");
+  mkdirSync(home);
+  const calls = { n: 0 };
+  const rename = (a, b) => {
+    calls.n += 1;
+    if (calls.n <= 2) throw Object.assign(new Error("EPERM: operation not permitted, rename"), { code: "EPERM" });
+    renameSync(a, b);
+  };
+  const r = await fetchRelease("pi", url, envFor(home), new AbortController().signal, { platform: "win32", rename, sleep: () => {} });
+  assert.equal(calls.n, 3);
+  assert.equal(r.sha, sha);
   assert.deepEqual(readdirSync(agentDir(home, "pi")), [sha]);
 });

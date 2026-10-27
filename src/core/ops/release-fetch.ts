@@ -1,7 +1,7 @@
 // impl/07 §6 step 4a, ADR-0010 §3 (git checkout installs: pi, opencode; no npm), DEVIATIONS D-M5-U1-1, D-M5-U2-1.
 // Clones the release branch into <DATA_ROOT>/plugins/<agent>/.fetch-<pid>, reads HEAD, renames the dir to <sha>.
 // argv only, shell:false (runProcess), GIT_NO_PROMPT_ENV, any git failure is FETCH_FAILED.
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   DATA_PLUGINS_DIR_NAME, GIT_BIN, GIT_CLONE_ARGS, GIT_EXIT_LABEL, GIT_HEAD_SHA_ARGS, GIT_NO_CRLF_ENV, GIT_NO_PROMPT_ENV, GIT_NOT_STARTED,
@@ -13,6 +13,7 @@ import { resolveConfigDir } from "../project/config-dir.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
 import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess, type RunResult } from "../sandbox/spawn.ts";
+import { renameWithRetry, type AtomicOptions } from "./atomic-file.ts";
 
 export interface ReleaseFetchResult {
   sha: string; // HEAD of the cloned release branch
@@ -37,7 +38,7 @@ async function git(bin: string, args: readonly string[], cwd: string, env: Recor
  * removed first; on any failure the .fetch dir is removed. When <sha> already exists it is kept as is and
  * the fresh clone is removed. Does not verify sums or swap `current` (verify-sums.ts, plugin-swap.ts).
  */
-export async function fetchRelease(agent: AgentId, url: string, env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<ReleaseFetchResult> {
+export async function fetchRelease(agent: AgentId, url: string, env: NodeJS.ProcessEnv, signal: AbortSignal, opts: AtomicOptions = {}): Promise<ReleaseFetchResult> {
   const agentDir = join(resolveConfigDir(env), DATA_PLUGINS_DIR_NAME, agent);
   mkdirSync(agentDir, { recursive: true });
   const fetchDir = join(agentDir, UPGRADE_FETCH_DIR_PREFIX + process.pid);
@@ -53,7 +54,7 @@ export async function fetchRelease(agent: AgentId, url: string, env: NodeJS.Proc
     const sha = await git(gitBin, GIT_HEAD_SHA_ARGS, fetchDir, childEnv, signal);
     const dir = join(agentDir, sha);
     if (existsSync(dir)) rmSync(fetchDir, { recursive: true, force: true });
-    else renameSync(fetchDir, dir);
+    else renameWithRetry(fetchDir, dir, opts); // DEVIATIONS D-WIN-ATOMIC-2
     return { sha, dir };
   } catch (e) {
     rmSync(fetchDir, { recursive: true, force: true });

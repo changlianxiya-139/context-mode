@@ -4,7 +4,7 @@
 // Windows cannot rename a link over a dir link).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -111,4 +111,34 @@ test("[M7] plugin-swap/a-stop-between-the-two-renames-is-undone-by-the-next-call
   assert.deepEqual(r.removed, [path.join(dir, "aaa")]);
   assert.equal(lstatSync(path.join(dir, "current.old"), { throwIfNoEntry: false }), undefined);
   assert.equal(lstatSync(path.join(dir, "current.swap"), { throwIfNoEntry: false }), undefined);
+});
+
+// DEVIATIONS D-WIN-ATOMIC-2: on Windows a rename of `current` / `current.swap` fails with EPERM when the host or
+// antivirus holds a handle inside it. Fake platform + injected rename: runs on every OS.
+test("[win] plugin-swap/retries-EPERM-on-link-rename-then-swaps", (t) => {
+  const dir = agentDir(t);
+  version(dir, "aaa");
+  swapPluginCurrent(dir, "aaa");
+  version(dir, "bbb");
+  const calls = { n: 0 };
+  const rename = (a, b) => {
+    calls.n += 1;
+    if (calls.n <= 2) throw Object.assign(new Error("EPERM: operation not permitted, rename"), { code: "EPERM" });
+    renameSync(a, b);
+  };
+  const r = swapPluginCurrent(dir, "bbb", { platform: "win32", rename, sleep: () => {} });
+  assert.ok(calls.n >= 4, "two failed tries, then both renames");
+  assert.equal(realpathSync(current(dir)), path.join(dir, "bbb"));
+  assert.equal(r.previous, path.join(dir, "aaa"));
+  assert.equal(existsSync(path.join(dir, "current.old")), false);
+});
+
+test("[win] plugin-swap/EPERM-that-never-clears-throws-and-keeps-old-current", (t) => {
+  const dir = agentDir(t);
+  version(dir, "aaa");
+  swapPluginCurrent(dir, "aaa");
+  version(dir, "bbb");
+  const rename = () => { throw Object.assign(new Error("EPERM: operation not permitted, rename"), { code: "EPERM" }); };
+  assert.throws(() => swapPluginCurrent(dir, "bbb", { platform: "win32", rename, sleep: () => {} }), /EPERM/);
+  assert.equal(realpathSync(current(dir)), path.join(dir, "aaa"));
 });
