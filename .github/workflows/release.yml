@@ -1,4 +1,5 @@
-# impl/13 §9, A10, ADR-0013. One run: ci -> plan -> build -> publish-stage -> smoke -> publish-promote.
+# impl/13 §9, A10, ADR-0013. One run: ci -> plan -> build -> publish-stage -> smoke -> publish-promote
+# -> publish-npm -> github-release. The GitHub release comes last: a failed publish-npm leaves none (D-RN-ORDER-1).
 # Started by the /release skill with `gh workflow run`. mode=rollback runs only ci -> rollback.
 # A pushed v2.* tag also starts it: the tag is the version, stage/promote reuse it, a x.y.z-<pre> version is a
 # GitHub prerelease, never Latest, and npm gets dist-tag next (D-RN-TAG-1).
@@ -185,12 +186,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: fast-forward release to release-staging, push tag, GitHub Release with SHA256SUMS
+      - name: fast-forward release to release-staging, push tag (no GitHub release here, D-RN-ORDER-1)
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
-          NOTES: ${{ needs.plan.outputs.notes }}
-        run: node scripts/release/publish.mjs --promote --version "$VERSION" --notes "$NOTES"
+        run: node scripts/release/publish.mjs --promote --version "$VERSION"
   publish-npm:
     needs: [plan, publish-promote]
     if: ${{ inputs.mode != 'rollback' && (inputs.publish || startsWith(github.ref, 'refs/tags/v2.')) }}
@@ -222,6 +221,33 @@ jobs:
       - name: publish with provenance, dist-tag next (never latest)
         working-directory: release-out
         run: npm publish --provenance --access public --tag next
+  # D-RN-ORDER-1: run 40496186557 (v2.0.0-next.4) made the GitHub prerelease, then the publish-npm job failed.
+  # Runs after publish-npm: on its success, or when it was skipped because publish=false and no v2.* tag.
+  # A failed, cancelled or skipped-but-asked publish-npm leaves no GitHub release.
+  github-release:
+    needs: [plan, publish-promote, publish-npm]
+    if: ${{ !cancelled() && inputs.mode != 'rollback' && needs.publish-promote.result == 'success' && (needs.publish-npm.result == 'success' || (needs.publish-npm.result == 'skipped' && !inputs.publish && !startsWith(github.ref, 'refs/tags/v2.'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-out
+          path: release-out
+      - name: GitHub Release with SHA256SUMS, after publish-npm
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          NOTES: ${{ needs.plan.outputs.notes }}
+        run: node scripts/release/publish.mjs --github-release --version "$VERSION" --notes "$NOTES"
   rollback:
     needs: ci
     if: ${{ inputs.mode == 'rollback' }}
