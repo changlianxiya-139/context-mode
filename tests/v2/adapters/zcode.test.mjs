@@ -9,7 +9,7 @@ import { decode, encode, TOOL_NAME_PREFIX } from "../../../src/adapters/zcode.ts
 
 const base = { session_id: "z-1", sessionId: "z-1", cwd: "/tmp/proj" };
 
-test("own prefix is the hyphen Claude-shape prefix, unverified until T-ZC (DECISIONS-r9 R3)", () => {
+test("own prefix is the documented mcp__<server>__<tool> name with the hyphen kept (D-N7-ZCODE-NAMES-1)", () => {
   assert.equal(TOOL_NAME_PREFIX, "mcp__context-mode__");
 });
 
