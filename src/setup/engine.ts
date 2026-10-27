@@ -200,10 +200,10 @@ function planJsonKeys(row: CheckRow, edits: FileEdit[], file: string, want: (doc
 
 /** D-HA-CODEX-TRUST-1: one [hooks.state."<key>"] table per own handler in the planned hooks.json, chained on any
  *  earlier edit of config.toml in this plan (the MCP server entry). */
-function planCodexTrust(row: CheckRow, edits: FileEdit[], hooksFile: string, file: string, command: string): void {
+function planCodexTrust(row: CheckRow, edits: FileEdit[], hooksFile: string, file: string, command: string, env: SetupContext["env"]): void {
   const hooksText = edits.find((e) => e.file === hooksFile)?.after ?? readOr(hooksFile);
   if (hooksText === undefined) return;
-  const want = codexTrustEntries(hooksFile, JSON.parse(hooksText), command);
+  const want = codexTrustEntries(hooksFile, JSON.parse(hooksText), command, env);
   if (!want.length) return;
   const prior = edits.find((e) => e.file === file);
   const text = prior ? prior.after : readOr(file);
@@ -217,11 +217,11 @@ function planCodexTrust(row: CheckRow, edits: FileEdit[], hooksFile: string, fil
 }
 
 /** ADR-0020 hook channel: write or merge the host hook file, or add the in-process plugin list entry. */
-function planHookInstall(row: CheckRow, edits: FileEdit[]): void {
+function planHookInstall(row: CheckRow, edits: FileEdit[], env: SetupContext["env"]): void {
   const h = row.hookInstall;
   if (h.kind === "file") {
     planJsonKeys(row, edits, h.file, (doc) => Object.keys(h.shape).map((k) => [[k], mergeOwn(doc[k], h.shape[k], h.command)]));
-    if (h.trust) planCodexTrust(row, edits, h.file, h.trust, h.command);
+    if (h.trust) planCodexTrust(row, edits, h.file, h.trust, h.command, env);
   } else if (h.kind === "plugin-list") {
     planJsonKeys(row, edits, h.file, (doc) => {
       const cur = doc[h.key[0]];
@@ -243,7 +243,7 @@ function planSkills(row: CheckRow, edits: FileEdit[]): void {
   }
 }
 
-function planRow(row: CheckRow, listed: boolean, stale: boolean): Plan {
+function planRow(row: CheckRow, listed: boolean, stale: boolean, env: SetupContext["env"]): Plan {
   const edits: FileEdit[] = [];
   if (row.config) {
     const c = row.config;
@@ -254,7 +254,7 @@ function planRow(row: CheckRow, listed: boolean, stale: boolean): Plan {
     if (res.edits.length) edits.push({ file: c.file, before, after: res.text, changes: res.edits.map((e) => ({ file: c.file, ...e })) });
   }
   for (const hf of row.hookFiles) { const e = planHookFile(row, hf); if (e) edits.push(e); }
-  planHookInstall(row, edits);
+  planHookInstall(row, edits, env);
   planSkills(row, edits);
   const cli = row.config || !row.cli || listed ? [] : row.cli.install;
   // D-US-1: a listed plugin whose copy is older than the package gets the host's own update command, not a reinstall.
@@ -392,7 +392,7 @@ function hookRegisteredCheck(row: CheckRow, env: SetupContext["env"], list: Chec
     return { name: "hook-registered", ok: list.ok, detail: list.ok ? undefined : `${l.bin} ${l.args.join(" ")} does not list context-mode (hooks ship in ${h.via})` };
   }
   const edits: FileEdit[] = [];
-  try { planHookInstall(row, edits); } catch (e) { return { name: "hook-registered", ok: false, detail: (e as Error).message }; }
+  try { planHookInstall(row, edits, env); } catch (e) { return { name: "hook-registered", ok: false, detail: (e as Error).message }; }
   if (!edits.length) return { name: "hook-registered", ok: true };
   const trust = h.kind === "file" ? h.trust : undefined;
   if (trust && edits.every((e) => e.file === trust && e.changes.every((c) => isTrust(row, c)))) return { name: "hook-registered", ok: false, detail: `${h.file}: the context-mode hooks are not trusted in ${trust}; re-run setup` };
@@ -654,7 +654,7 @@ async function setupRow(row: CheckRow, ctx: SetupContext, run: Run, dryRun: bool
   let plan: Plan;
   try {
     const listed = needsBin ? listCheck(row, ctx.env)?.ok === true : false;
-    plan = planRow(row, listed, copyCheck(row, ctx.pkgDir)?.ok === false);
+    plan = planRow(row, listed, copyCheck(row, ctx.pkgDir)?.ok === false, ctx.env);
   } catch (e) { return { ...res, status: "FAIL", reason: (e as Error).message }; }
   // The config entry is current when the plan changes nothing in that file but codex trust entries.
   const configEdited = (file: string): boolean => plan.edits.some((e) => e.file === file && e.changes.some((c) => !isTrust(row, c)));

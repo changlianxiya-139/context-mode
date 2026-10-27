@@ -1,11 +1,14 @@
 // src/setup/codex-trust.ts
 // Codex 0.164.0 runs a hooks.json hook only when config.toml holds
-// [hooks.state."<realpath of hooks.json>:<snake_event>:<group>:<handler>"] trusted_hash = "sha256:<hex>".
+// [hooks.state."<codexHome>/hooks.json:<snake_event>:<group>:<handler>"] trusted_hash = "sha256:<hex>".
 // The hex is sha256 of the sorted-key JSON {event_name, matcher?, hooks:[{...handler, async:false}]}; checked against
 // currentHash from `codex app-server` hooks/list (D-HA-CODEX-TRUST-1). Only context-mode's own handlers are trusted.
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
+
+import { spawnForm, whichBin } from "./spawn-bin.ts";
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -39,11 +42,55 @@ function realFile(file: string): string {
   return path.join(realpathSync(dir), ...rest);
 }
 
-/** The [hooks.state."<key>"] tables that trust every handler whose command is `command` in the hooks.json `doc`. */
-export function codexTrustEntries(hooksFile: string, doc: unknown, command: string): [readonly string[], unknown][] {
+const ASK_TIMEOUT_MS = 10_000;
+const WIN_VERBATIM_PREFIX = "\\\\?\\";
+
+/** The `codexHome` of the first JSON line that has one (the `initialize` reply of `codex app-server`); other lines are skipped. */
+export function codexHomeFromReply(out: string): string | undefined {
+  for (const line of out.split("\n")) {
+    let m: unknown;
+    try { m = JSON.parse(line); } catch { continue; }
+    if (isObj(m) && isObj(m.result) && typeof m.result.codexHome === "string" && m.result.codexHome !== "") return m.result.codexHome;
+  }
+  return undefined;
+}
+
+/** D-WIN-CODEX-KEY-1: the config dir exactly as Codex spells it. Codex builds each hook key from this value, and on
+ *  Windows it may carry a \\?\ prefix or another drive-letter case than Node's path, so setup asks Codex instead of
+ *  computing the form. No Codex on PATH, or no answer: undefined. */
+export function askCodexHome(env: Record<string, string | undefined>): string | undefined {
+  const bin = whichBin("codex", env);
+  if (!bin) return undefined;
+  const f = spawnForm(bin, ["app-server"], env);
+  const input = JSON.stringify({ id: 1, method: "initialize", params: { clientInfo: { name: "context-mode-setup", version: "2.0.0" } } }) + "\n";
+  const r = spawnSync(f.command, f.args, { env, input, encoding: "utf8", timeout: ASK_TIMEOUT_MS, windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
+  return typeof r.stdout === "string" ? codexHomeFromReply(r.stdout) : undefined;
+}
+
+/** A dir compared the way the platform compares it: Windows ignores case, the \\?\ prefix, / vs \\ and a trailing separator. */
+function sameDir(a: string, b: string, platform: NodeJS.Platform): boolean {
+  if (platform !== "win32") return path.posix.normalize(a) === path.posix.normalize(b);
+  const norm = (p: string): string => {
+    const bare = p.startsWith(WIN_VERBATIM_PREFIX) ? p.slice(WIN_VERBATIM_PREFIX.length) : p;
+    const n = path.win32.normalize(bare).toLowerCase();
+    return n.length > 3 && n.endsWith("\\") ? n.slice(0, -1) : n;
+  };
+  return norm(a) === norm(b);
+}
+
+/** The dir that starts every key. Codex's own spelling of our dir when it names that dir; else the real path of our dir. */
+export function codexKeyDir(o: { dir: string; asked?: string; real: (p: string) => string }, platform: NodeJS.Platform = process.platform): string {
+  return o.asked !== undefined && sameDir(o.dir, o.asked, platform) ? o.asked : o.real(o.dir);
+}
+
+/** The [hooks.state."<key>"] tables that trust every handler whose command is `command` in the hooks.json `doc`.
+ *  With `env`, Codex is asked for its config dir spelling (askCodexHome). */
+export function codexTrustEntries(hooksFile: string, doc: unknown, command: string, env?: Record<string, string | undefined>): [readonly string[], unknown][] {
   const out: [readonly string[], unknown][] = [];
   if (!isObj(doc) || !isObj(doc.hooks)) return out;
-  const real = realFile(hooksFile);
+  const abs = path.resolve(hooksFile);
+  const dir = codexKeyDir({ dir: path.dirname(abs), asked: env ? askCodexHome(env) : undefined, real: realFile });
+  const real = (dir.startsWith(WIN_VERBATIM_PREFIX) ? path.win32 : path).join(dir, path.basename(abs));
   for (const [event, groups] of Object.entries(doc.hooks)) {
     if (!Array.isArray(groups)) continue;
     groups.forEach((g, gi) => {
