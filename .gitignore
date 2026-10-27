@@ -9,6 +9,7 @@ node_modules/
 !/build/check-removed.mjs
 !/build/hash.mjs
 !/build/manifests.ts
+!/build/main-tree.mjs
 !/build/readme-agents.mjs
 # v2 build output and the prompt file build.mjs generates and deletes (impl/13 §2.2)
 release-out/
