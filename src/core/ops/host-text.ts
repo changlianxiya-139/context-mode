@@ -5,11 +5,20 @@
 export interface HostLayout { bom: boolean; crlf: boolean; }
 
 const BOM_CODE = 0xfeff;
+const CR_CODE = 0x0d;
 const CRLF = "\r\n";
 const LF = "\n";
 
+// OC-WIN-5: the file's dominant line end decides what inserted lines get. Count CRLF and bare LF once; CRLF wins
+// a tie (a one-line file edited on Windows), a file with no CRLF is LF. A mixed file is written in one style.
 export function hostLayout(raw: string): HostLayout {
-  return { bom: raw.length > 0 && raw.charCodeAt(0) === BOM_CODE, crlf: raw.indexOf(CRLF) >= 0 };
+  let crlf = 0;
+  let lf = 0;
+  for (let i = raw.indexOf(LF); i >= 0; i = raw.indexOf(LF, i + 1)) {
+    if (i > 0 && raw.charCodeAt(i - 1) === CR_CODE) crlf += 1;
+    else lf += 1;
+  }
+  return { bom: raw.length > 0 && raw.charCodeAt(0) === BOM_CODE, crlf: crlf > 0 && crlf >= lf };
 }
 
 /** The file text without a leading U+FEFF, with every CRLF turned into LF. A lone CR stays. */

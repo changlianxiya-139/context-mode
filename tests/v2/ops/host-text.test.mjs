@@ -95,3 +95,29 @@ test("host-text: readUserDeny reads deny rules from a settings.json with a BOM (
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
   assert.deepEqual(readUserDeny(proj, "claude-code"), ["Bash(sudo *)"]);
 });
+
+// OC-WIN-5: the editor inserts text as LF and withLayout gives it the file's line end. Runs on every OS.
+test("host-text: lines inserted into a CRLF opencode.json are CRLF too, not mixed (OC-WIN-5)", (t) => {
+  const dir = tmp(t);
+  const file = path.join(dir, "opencode.json");
+  const raw = BOM + '{\r\n  "theme": "dark"\r\n}\r\n';
+  writeFileSync(file, raw, "utf8");
+  const cur = readHostConfig("opencode", file);
+  writeHostConfigEdit(file, cur, { plugin: ["a", "b"], mcp: { "context-mode": { type: "local", command: ["node", "s.mjs"] } } });
+  const out = readFileSync(file, "utf8");
+  assert.equal(out.split("\r\n").join("").includes("\n"), false, "every line end is CRLF");
+  assert.ok(out.split("\r\n").length > 8, "the insert added lines");
+  assert.deepEqual(JSON.parse(out.slice(1)).theme, "dark");
+});
+
+test("host-text: the dominant line end wins; a mostly-LF file with one CRLF line stays LF (OC-WIN-5)", (t) => {
+  assert.deepEqual(hostLayout('{\n  "a": 1,\r\n  "b": 2\n}\n'), { bom: false, crlf: false });
+  assert.deepEqual(hostLayout('{\r\n  "a": 1,\n  "b": 2\r\n}\r\n'), { bom: false, crlf: true });
+  assert.deepEqual(hostLayout('{\r\n  "a": 1\n}'), { bom: false, crlf: true }, "a tie keeps CRLF");
+  const dir = tmp(t);
+  const file = path.join(dir, "opencode.json");
+  writeFileSync(file, '{\n  "theme": "dark",\r\n  "x": 1\n}\n', "utf8");
+  writeHostConfigEdit(file, readHostConfig("opencode", file), { plugin: ["a"] });
+  const out = readFileSync(file, "utf8");
+  assert.equal(out.includes("\r"), false, "no CRLF forced onto an LF file");
+});
