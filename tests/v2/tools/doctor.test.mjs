@@ -12,6 +12,7 @@ import Database from "better-sqlite3";
 import { ctxDoctor, runDoctorChecks } from "../../../src/core/tools/doctor.ts";
 import { getAdapter } from "../../../src/adapters/table.ts";
 import { composeMatcher } from "../../../src/core/ops/doctor-config.ts";
+import * as C from "../../../src/core/contracts/constants.ts";
 
 const KEY = "d".repeat(16);
 const ORDER = ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"];
@@ -31,9 +32,9 @@ function ctxFor(home, agent = "claude-code") {
   };
 }
 
-async function doctor(home, agent = "claude-code") {
+async function doctor(home, agent = "claude-code", extraEnv = {}) {
   const ctx = ctxFor(home, agent);
-  const host = { env: { HOME: home, PATH: process.env.PATH ?? "" }, bundleDir: path.join(home, "no-bundle"), piCwd: undefined };
+  const host = { env: { HOME: home, PATH: process.env.PATH ?? "", ...extraEnv }, bundleDir: path.join(home, "no-bundle"), piCwd: undefined };
   return { ctx, rows: await runDoctorChecks(ctx, getAdapter(agent), host) };
 }
 
@@ -96,6 +97,17 @@ test("[M5] doctor/codex-effective-hooks-state-no-features-hooks-key-means-true (
   put(path.join(home, ".codex", "config.toml"), `model = "o1"\n\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\n`);
   const d3 = (await doctor(home, "codex")).rows.find((r) => r.id === "D3");
   assert.equal(d3.status, "PASS", d3.detail);
+});
+
+test("[D-N6-CODEX-HOME-2] doctor/D5 looks for codex hooks.json under CODEX_HOME when it is set", async (t) => {
+  const home = tmp(t);
+  const codexDir = path.join(home, "codex-home");
+  put(path.join(codexDir, "hooks.json"), { hooks: {} });
+  const d5 = (await doctor(home, "codex", { CODEX_HOME: codexDir })).rows.find((r) => r.id === "D5");
+  assert.equal(d5.status, "UNKNOWN");
+  assert.equal(d5.detail, C.D5_CODEX_UNTRUSTED_DETAIL);
+  const d5home = (await doctor(home, "codex")).rows.find((r) => r.id === "D5");
+  assert.notEqual(d5home.detail, C.D5_CODEX_UNTRUSTED_DETAIL);
 });
 
 test("[M5] doctor/user-hook-timeout-kept (doctor reads, never rewrites settings.json)", async (t) => {
