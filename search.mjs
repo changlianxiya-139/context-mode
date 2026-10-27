@@ -354,8 +354,10 @@ var V1_REASON = Object.freeze({
 var UPGRADE_REPORT_ONLY_REASONS = Object.freeze([V1_REASON.statusLine, V1_REASON.vscodeMcp, V1_REASON.dataDirShared, V1_REASON.tmpFile, V1_REASON.kiroSteering]);
 var OPENCODE_TOOL_PREFIX = SERVER_KEY + "_";
 var ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"]);
+var CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
+var CODEX_OMIT_DEFERRED = Object.freeze(["deferred"]);
 var OWN_MCP_ENTRY = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY] },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
@@ -1167,6 +1169,10 @@ var BY_ID = new Map(ADAPTERS.map((r) => [r.id, r]));
 var REPLACE_ROWS = /* @__PURE__ */ new Set(["claude-code", "gemini", "copilot-cli", "pi"]);
 function hasReplace(row) {
   return REPLACE_ROWS.has(row.id);
+}
+var DUMP_REPLACE_ROWS = /* @__PURE__ */ new Set(["claude-code", "copilot-cli", "pi"]);
+function dumpRunsThenReplaces(row) {
+  return DUMP_REPLACE_ROWS.has(row.id) && hasReplace(row);
 }
 function getAdapter(id) {
   return BY_ID.get(id);
@@ -4642,7 +4648,7 @@ function read(ev, row, input) {
   return ALLOW;
 }
 function shellDump(cmds, cwd, row) {
-  if (row.nativeTools.read !== void 0 && row.nativeTools.read.length > 0 && hasReplace(row)) return null;
+  if (row.nativeTools.read !== void 0 && row.nativeTools.read.length > 0 && dumpRunsThenReplaces(row)) return null;
   if (cmds.length !== 1) return null;
   const c = cmds[0];
   if (c.redirectsToFile || c.endsInBoundedSink) return null;

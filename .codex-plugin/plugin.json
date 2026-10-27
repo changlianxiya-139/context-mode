@@ -1,0 +1,12 @@
+{
+  "description": "Context Mode for Codex",
+  "hooks": "./.codex-plugin/hooks.json",
+  "interface": {
+    "category": "Productivity",
+    "displayName": "context-mode"
+  },
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "name": "context-mode",
+  "skills": "./codex/skills/",
+  "version": "2.0.0-next.6"
+}

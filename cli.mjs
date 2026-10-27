@@ -442,8 +442,10 @@ var UPGRADE_REPORT_ONLY_REASONS = Object.freeze([V1_REASON.statusLine, V1_REASON
 var OPENCODE_TOOL_PREFIX = SERVER_KEY + "_";
 var JSON_INDENT_UNIT = "  ";
 var ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"]);
+var CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
+var CODEX_OMIT_DEFERRED = Object.freeze(["deferred"]);
 var OWN_MCP_ENTRY = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY] },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
@@ -5151,6 +5153,7 @@ var STATE_DIR = ".context-mode";
 var LOCK_FILE = "setup.lock";
 var BACKUP_DIR = "backups";
 var PLUGIN_ID = `${SERVER_KEY}@${SERVER_KEY}`;
+var SKILLS_DIR_NAME = "skills";
 var INSTRUCTION_FILES = Object.freeze([
   "CLAUDE.md",
   "AGENTS.md",
@@ -5164,10 +5167,17 @@ function configEdits(c3) {
   return [[c3.key, c3.value], ...c3.also ?? []];
 }
 var COMMAND_SKILLS = Object.freeze(["ctx-doctor", "ctx-stats", "ctx-upgrade"]);
-var SKILLS_DIR = "skills";
 var SKILL_FILE = "SKILL.md";
 var OPENCODE_PLUGIN = ["opencode", "plugin.js"];
 var CODEX_CONFIG_FILE = "config.toml";
+var CODEX_HOME_ENV2 = "CODEX_HOME";
+var CODEX_DIR = ".codex";
+function agentPath(ctx, id, rel) {
+  const segs = typeof rel === "string" ? rel.split("/") : [...rel];
+  const codexHome = ctx.env[CODEX_HOME_ENV2];
+  if (id === "codex" && segs[0] === CODEX_DIR && codexHome !== void 0 && codexHome !== "") return path2.join(codexHome, ...segs.slice(1));
+  return path2.join(ctx.home, ...segs);
+}
 function renderSkill(text2, prefix) {
   const prefixes = typeof prefix === "string" ? [prefix] : prefix;
   if (prefixes.length === 1 && prefixes[0] === "") return text2;
@@ -5183,6 +5193,23 @@ function skillDirPrefixes(dirPath) {
   }
   return out2;
 }
+var EXTENSION_LIST = ["extensions", "list"];
+function extensionPlugin(bin, id) {
+  return {
+    bin,
+    args: EXTENSION_LIST,
+    plugin: SERVER_KEY,
+    hooksVia: getAdapter(id).hookChannel.path,
+    skillsVia: SKILLS_DIR_NAME,
+    format: "extension",
+    enable: ["extensions", "enable", SERVER_KEY]
+  };
+}
+var NATIVE_PLUGIN = {
+  codex: { bin: "codex", args: ["plugin", "list"], plugin: PLUGIN_ID, hooksVia: ".codex-plugin", skillsVia: path2.join("codex", SKILLS_DIR_NAME), format: "table" },
+  qwen: extensionPlugin("qwen", "qwen"),
+  gemini: extensionPlugin("gemini", "gemini")
+};
 function serverCmd(ctx, id) {
   return [process.execPath, path2.join(ctx.pkgDir, SERVER_BUNDLE), AGENT_FLAG, id];
 }
@@ -5205,7 +5232,7 @@ function configFor(ctx, id) {
   const [node, server, flag, agent] = serverCmd(ctx, id);
   const own2 = OWN_MCP_ENTRY[id];
   if (own2) {
-    const file = path2.join(ctx.home, ...own2.file);
+    const file = agentPath(ctx, id, own2.file);
     const format = file.endsWith(".toml") ? "toml" : id === "vscode" ? "jsonc" : "json";
     const args = id === "vscode" ? [server, flag, agent, WORKSPACE_FOLDER_FLAG, VSCODE_WORKSPACE_VAR] : [server, flag, agent];
     const also = own2.also?.map(([k, v]) => [k, v]);
@@ -5255,10 +5282,11 @@ var LIST = {
   // D-HF-OPENCODE-LIST-1: --pure skips external plugins, so a fresh HOME does not wait on the @opencode-ai/plugin install.
   opencode: { bin: "opencode", args: ["mcp", "list", "--pure"] }
 };
-function hookFilesFor(home, id) {
+function hookFilesFor(ctx, id) {
+  const home = ctx.home;
   switch (id) {
     case "codex":
-      return [{ file: path2.join(home, ".codex", "hooks.json"), mode: "rewrite" }];
+      return [{ file: agentPath(ctx, id, [CODEX_DIR, "hooks.json"]), mode: "rewrite" }];
     case "copilot-cli":
       return [{ file: path2.join(home, ".copilot", "hooks", "context-mode.json"), mode: "rewrite" }];
     case "claude-code":
@@ -5276,7 +5304,7 @@ function hookInstallFor(ctx, row, command) {
   if (ch.kind === "home-file") {
     const shape = HOOK_SHAPES[row.id];
     if (!shape) throw new Error(`setup: ${row.id} has a home-file hook channel and no hook shape`);
-    const file = path2.join(ctx.home, ch.path);
+    const file = agentPath(ctx, row.id, ch.path);
     if (row.id === "codex") return { kind: "file", file, shape: shape(row, command), command, trust: path2.join(path2.dirname(file), CODEX_CONFIG_FILE) };
     return { kind: "file", file, shape: shape(row, command), command };
   }
@@ -5290,13 +5318,19 @@ function hookInstallFor(ctx, row, command) {
   }
   return { kind: "package", via: ch.path };
 }
+function bareSkillDir() {
+  const row = ADAPTERS.find((r2) => r2.skillChannel.kind === "package" && r2.toolNamePrefix === "");
+  if (row === void 0) throw new Error("setup: no package skill channel holds the bare tool names");
+  return row.skillChannel.path;
+}
 function skillInstallFor(ctx, row) {
   const ch = row.skillChannel;
   if (ch.kind === "package") return { kind: "package", via: ch.path };
-  const dir = path2.join(ctx.home, ch.path);
+  const dir = agentPath(ctx, row.id, ch.path);
+  const src = path2.join(ctx.pkgDir, bareSkillDir());
   return { kind: "dir", dir, prefixes: skillDirPrefixes(ch.path), files: COMMAND_SKILLS.map((name) => ({
     name,
-    src: path2.join(ctx.pkgDir, SKILLS_DIR, name, SKILL_FILE),
+    src: path2.join(src, name, SKILL_FILE),
     file: path2.join(dir, name, SKILL_FILE)
   })) };
 }
@@ -5304,7 +5338,7 @@ function buildRegistry(ctx) {
   return ADAPTERS.map((row) => {
     const id = row.id;
     const config = configFor(ctx, id);
-    const hookFiles = hookFilesFor(ctx.home, id);
+    const hookFiles = hookFilesFor(ctx, id);
     const hookCommand = [process.execPath, path2.join(ctx.pkgDir, HOOK_BUNDLE), AGENT_FLAG, id];
     const command = `"${hookCommand[0]}" "${hookCommand[1]}" ${AGENT_FLAG} ${id}`;
     const hookInstall = hookInstallFor(ctx, getAdapter(id), command);
@@ -5333,6 +5367,8 @@ function buildRegistry(ctx) {
     if (row.installMode !== "in-process") out2.hookCommand = hookCommand;
     const copy = copyFor(ctx, id);
     if (copy) out2.copy = copy;
+    const native = NATIVE_PLUGIN[id];
+    if (native) out2.nativePlugin = native;
     return out2;
   });
 }
@@ -5935,6 +5971,79 @@ function skillsCheck(row, pkgDir) {
   const bad = s.files.filter((f2) => readOr(f2.file) !== (existsSync6(f2.src) ? renderSkill(readFileSync3(f2.src, "utf8"), s.prefixes) : void 0));
   return { name: "skills", ok: bad.length === 0, detail: bad.length ? `${bad.map((f2) => f2.file).join(", ")} missing or without the ${s.prefixes.join(" / ") || "plain"} tool prefix` : void 0 };
 }
+var PLUGIN_ENABLED = "enabled";
+var WORD_TRIM = ",;";
+var EXT_ENABLED_USER = "Enabled (User):";
+var EXT_TRUE = "true";
+function tableState(n3, text2) {
+  const line = text2.split("\n").find((l2) => l2.split(" ").includes(n3.plugin));
+  if (line === void 0) return void 0;
+  return line.split(" ").map((w) => trimChars(w, WORD_TRIM)).includes(PLUGIN_ENABLED) ? "enabled" : "disabled";
+}
+function extensionState(n3, text2) {
+  let mine = false;
+  for (const raw of text2.split("\n")) {
+    const line = raw.trimEnd();
+    if (line.length && !line.startsWith(" ")) {
+      mine = line.split(" ")[1] === n3.plugin;
+      continue;
+    }
+    const t2 = line.trim();
+    if (mine && t2.startsWith(EXT_ENABLED_USER)) return t2.slice(EXT_ENABLED_USER.length).trim() === EXT_TRUE ? "enabled" : "disabled";
+  }
+  return void 0;
+}
+function nativeState(row, env) {
+  const n3 = row.nativePlugin;
+  if (!n3 || !hostBin(n3.bin, env).file) return void 0;
+  const r2 = runBin(n3.bin, n3.args, env);
+  if (r2.status !== 0) return void 0;
+  return n3.format === "extension" ? extensionState(n3, `${r2.stdout}${r2.stderr}`) : tableState(n3, `${r2.stdout}`);
+}
+function nativeRow(row, n3) {
+  return {
+    ...row,
+    config: void 0,
+    cli: void 0,
+    copy: void 0,
+    hookFiles: [],
+    listCommand: { bin: n3.bin, args: n3.args },
+    hookInstall: { kind: "package", via: n3.hooksVia },
+    skillInstall: { kind: "package", via: n3.skillsVia }
+  };
+}
+function trimChars(w, chars) {
+  let a2 = 0;
+  let b3 = w.length;
+  while (a2 < b3 && chars.includes(w.charAt(a2))) a2++;
+  while (b3 > a2 && chars.includes(w.charAt(b3 - 1))) b3--;
+  return w.slice(a2, b3);
+}
+async function nativeResult(row, ctx) {
+  const n3 = row.nativePlugin;
+  const state = nativeState(row, ctx.env);
+  if (!n3 || state === void 0) return void 0;
+  const bin = hostBin(n3.bin, ctx.env).file;
+  if (state === "disabled") {
+    if (!n3.enable) return void 0;
+    return {
+      id: row.id,
+      status: "FAIL",
+      v1: [],
+      changes: [],
+      checks: [],
+      bin,
+      reason: `context-mode is installed but disabled in ${n3.bin}, run ${n3.bin} ${n3.enable.join(" ")}`
+    };
+  }
+  const res = { id: row.id, status: "PASS", v1: [], changes: [], checks: await verifyRow(nativeRow(row, n3), ctx), bin };
+  const bad = res.checks.filter((c3) => !c3.ok);
+  if (bad.length) {
+    res.status = "FAIL";
+    res.reason = bad.map((c3) => `${c3.name}: ${c3.detail}`).join("; ");
+  }
+  return res;
+}
 async function verifyRow(row, ctx) {
   const env = ctx.env;
   const checks = [parseCheck(row)];
@@ -6042,7 +6151,7 @@ async function runSetup(opts) {
       }
       current = id;
       opts.onAgent?.(id, "start");
-      const res = await setupRow(row, ctx, run, !!opts.dryRun);
+      const res = await nativeResult(row, ctx) ?? await setupRow(row, ctx, run, !!opts.dryRun);
       current = void 0;
       agents.push(res);
       opts.onAgent?.(id, "done", res);
@@ -6117,6 +6226,12 @@ async function runDoctor(opts) {
       continue;
     }
     opts.onAgent?.(id, "start");
+    const native = await nativeResult(row, ctx);
+    if (native) {
+      agents.push(native);
+      opts.onAgent?.(id, "done", native);
+      continue;
+    }
     const res = await setupRow(row, ctx, run, true);
     if (res.status === "PASS") {
       if (res.v1.some((f2) => !UPGRADE_REPORT_ONLY_REASONS.includes(f2.reason))) {

@@ -7,9 +7,11 @@
   },
   "files": [
     ".claude-plugin",
+    ".codex-plugin",
     "SHA256SUMS",
     "claude-code",
     "cli.mjs",
+    "codex",
     "copilot",
     "fixtures",
     "gemini-extension.json",
@@ -23,6 +25,7 @@
     "server.mjs",
     "skills"
   ],
+  "main": "./opencode/plugin.js",
   "name": "context-mode",
   "pi": {
     "extensions": [
@@ -37,5 +40,5 @@
     "url": "git+https://github.com/mksglu/context-mode.git"
   },
   "type": "module",
-  "version": "2.0.0-next.5"
+  "version": "2.0.0-next.6"
 }

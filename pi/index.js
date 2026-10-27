@@ -11164,9 +11164,11 @@ var REPLACE_TRIGGER_BYTES = 4096;
 var REPLACE_RETURN_BYTES = 96;
 var SHAPE_RETURN_BYTES = 256;
 var REPLACE_CHUNK_BYTES = 48;
-function REPLACE_HANDLE_LINE(intent, handle, bytes4, prefix = "") {
-  return prefix + "ctx_search({queries:[" + JSON.stringify(intent) + "], source:" + JSON.stringify(handle) + "}) searches the whole output (" + bytes4 + " B).";
+function REPLACE_HANDLE_LINE(intent, handle, bytes4, prefix = "", asked = "") {
+  const queries = asked === "" ? [intent] : [intent, asked];
+  return prefix + "ctx_search({queries:[" + queries.map((q) => JSON.stringify(q)).join(",") + "], source:" + JSON.stringify(handle) + "}) searches the whole output (" + bytes4 + " B).";
 }
+var HANDLE_PROMPT_WORDS = 3;
 var MAX_CHUNK_BYTES = 4096;
 var SEARCH_PAGE_SIZE = 20;
 var SNIPPET_MAX_BYTES = 800;
@@ -11474,7 +11476,7 @@ var DECISION_OPTION_KEY = "option";
 var DECISION_LABEL_JOIN = " | ";
 var RELEASE_REPO_URL = "https://github.com/mksglu/context-mode.git";
 var RELEASE_BRANCH = "release";
-var BUNDLE_SHA = true ? "0bf5734278463ea178b282436a39ba81347dadab" : void 0;
+var BUNDLE_SHA = true ? "3374b3ce2faee35730f5c335678ca40b405e923c" : void 0;
 var DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"]);
 var DOCTOR_LABEL = Object.freeze({
   D1: "version",
@@ -11713,6 +11715,7 @@ var V1_HOOKS_DIR_NAME = "hooks";
 var SETTINGS_FILE = "settings.json";
 var CLAUDE_USER_CONFIG_FILE = ".claude.json";
 var HOOKS_JSON_FILE = "hooks.json";
+var CODEX_HOME_ENV = "CODEX_HOME";
 var CONFIG_TOML_FILE = "config.toml";
 var CONFIG_JSON_FILE = "config.json";
 var ZCODE_CLI_DIR = "cli";
@@ -11778,8 +11781,10 @@ var JSON_INDENT_UNIT = "  ";
 var MCP_COMMAND_FIELD = "command";
 var MCP_ARGS_FIELD = "args";
 var ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"]);
+var CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
+var CODEX_OMIT_DEFERRED = Object.freeze(["deferred"]);
 var OWN_MCP_ENTRY = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY] },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
@@ -12663,6 +12668,10 @@ var BY_ID = new Map(ADAPTERS.map((r) => [r.id, r]));
 var REPLACE_ROWS = /* @__PURE__ */ new Set(["claude-code", "gemini", "copilot-cli", "pi"]);
 function hasReplace(row5) {
   return REPLACE_ROWS.has(row5.id);
+}
+var DUMP_REPLACE_ROWS = /* @__PURE__ */ new Set(["claude-code", "copilot-cli", "pi"]);
+function dumpRunsThenReplaces(row5) {
+  return DUMP_REPLACE_ROWS.has(row5.id) && hasReplace(row5);
 }
 var RECALL_ROWS = /* @__PURE__ */ new Set(["claude-code", "codex", "gemini", "qwen", "copilot-cli", "vscode", "zcode"]);
 function hasRecall(row5) {
@@ -13626,6 +13635,10 @@ function homeDirOf(env) {
   if (profile !== void 0 && profile !== "") return profile;
   return null;
 }
+function codexDirOf(env, home) {
+  const dir = env[CODEX_HOME_ENV];
+  return dir !== void 0 && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR.codex);
+}
 function homeOf(env) {
   const home = homeDirOf(env);
   if (home !== null) return home;
@@ -14282,7 +14295,7 @@ function read(ev, row5, input) {
   return ALLOW;
 }
 function shellDump(cmds, cwd, row5) {
-  if (row5.nativeTools.read !== void 0 && row5.nativeTools.read.length > 0 && hasReplace(row5)) return null;
+  if (row5.nativeTools.read !== void 0 && row5.nativeTools.read.length > 0 && dumpRunsThenReplaces(row5)) return null;
   if (cmds.length !== 1) return null;
   const c = cmds[0];
   if (c.redirectsToFile || c.endsInBoundedSink) return null;
@@ -17203,16 +17216,23 @@ var TYPO_MIN_LEN = 5;
 var TYPO_MAX_DIST = 2;
 function typoTerms(db, words) {
   const has2 = stmt(db.raw, "SELECT 1 AS x FROM chunks_vocab WHERE term = ?");
-  const near = stmt(db.raw, "SELECT term, doc FROM chunks_vocab WHERE length(term) BETWEEN ? AND ?");
+  const near = stmt(db.raw, "SELECT term, doc, length(term) AS n FROM chunks_vocab WHERE length(term) BETWEEN ? AND ?");
+  const stems = queryStems(words.join(" "));
+  const miss = stems.map((stem) => has2.get(stem) === void 0 && [...stem].length >= TYPO_MIN_LEN);
+  if (!miss.includes(true)) return null;
+  const lens = stems.filter((_, i) => miss[i]).map((stem) => stem.length);
+  const rows = near.all(Math.min(...lens) - TYPO_MAX_DIST, Math.max(...lens) + TYPO_MAX_DIST);
   let changed = false;
   const out = [];
-  for (const stem of queryStems(words.join(" "))) {
-    if (has2.get(stem) !== void 0 || [...stem].length < TYPO_MIN_LEN) {
+  stems.forEach((stem, i) => {
+    if (!miss[i]) {
       out.push(stem);
-      continue;
+      return;
     }
     let best = null;
-    for (const r of near.all(stem.length - TYPO_MAX_DIST, stem.length + TYPO_MAX_DIST)) {
+    for (const r of rows) {
+      const n = Number(r.n);
+      if (n < stem.length - TYPO_MAX_DIST || n > stem.length + TYPO_MAX_DIST) continue;
       const d = editDistance(stem, r.term, TYPO_MAX_DIST);
       if (d > TYPO_MAX_DIST) continue;
       if (best === null || d < best.d || d === best.d && (r.doc > best.doc || r.doc === best.doc && r.term < best.term)) {
@@ -17223,7 +17243,7 @@ function typoTerms(db, words) {
       out.push(best.term);
       changed = true;
     }
-  }
+  });
   return changed ? out.map((t) => `"${t.replaceAll('"', '""')}"*`) : null;
 }
 function ftsQuery(db, q, scope, ctx, sessionId, limit, offset, source) {
@@ -18404,6 +18424,19 @@ function appendDetached(project, sessionId, row5) {
   void write(project, row5);
 }
 
+// src/core/hooks/handle-query.ts
+function askedWords(intent, prompt, text) {
+  const want = new Set(wordTokens(prompt.toLowerCase()));
+  for (const w of wordTokens(intent.toLowerCase())) want.delete(w);
+  if (want.size === 0) return "";
+  const counts = /* @__PURE__ */ new Map();
+  for (const w of wordTokens(text.toLowerCase())) {
+    if (want.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  const picked = [...counts.entries()].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).slice(0, HANDLE_PROMPT_WORDS).map((e) => e[0]);
+  return picked.join(" ");
+}
+
 // src/core/hooks/decision.ts
 function isObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -18814,7 +18847,7 @@ async function postToolUse(ev, row5, project, env) {
   const handle = sourceHandle(sourceId);
   const prompt = await lastPrompt(project, ev.sessionId);
   const rankQuery = prompt.trim() === "" ? void 0 : intent + " " + prompt;
-  const handleLine = REPLACE_HANDLE_LINE(intent, handle, result.bytes, row5.toolNamePrefix);
+  const handleLine = REPLACE_HANDLE_LINE(intent, handle, result.bytes, row5.toolNamePrefix, askedWords(intent, prompt, text));
   const budget = replaceBudget(handleLine, moreLine2(intent, label));
   const digest = shapeDigest(text, rankQuery ?? intent, SHAPE_RETURN_BYTES);
   if (digest !== null) return { kind: "replace", output: replaceOutput(digest, handleLine) };
@@ -20427,6 +20460,7 @@ function ownHooks(block, shape, timeoutKey, native, agent) {
 var validTimeout = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
 function mcpFile(row5, home, env) {
   const spec = OWN_MCP_ENTRY[row5.id];
+  if (row5.id === "codex") return join10(codexDirOf(env, home), CONFIG_TOML_FILE);
   if (spec !== void 0) return join10(home, ...spec.file);
   if (row5.id === "opencode") return join10(home, ...AGENT_HOME_DIR.opencode, OPENCODE_BASE_CONFIG_FILE);
   if (row5.id === "pi") {
@@ -20454,9 +20488,10 @@ function hookParts(row5, home, env, worktree) {
   let block;
   try {
     const root = spec.root === "plugin" ? resolvePluginRoot(row5, env) : spec.root === "home" ? home : worktree;
-    block = hostConfigValueAt(readParsed(row5.id, join10(root, ...spec.file)).value, spec.key);
+    const file2 = row5.id === "codex" ? join10(codexDirOf(env, home), HOOKS_JSON_FILE) : join10(root, ...spec.file);
+    block = hostConfigValueAt(readParsed(row5.id, file2).value, spec.key);
     if (row5.id === "codex") {
-      const config4 = readParsed(row5.id, join10(home, ...AGENT_HOME_DIR.codex, CONFIG_TOML_FILE)).value;
+      const config4 = readParsed(row5.id, join10(codexDirOf(env, home), CONFIG_TOML_FILE)).value;
       if (hostConfigValueAt(config4, CODEX_FEATURES_HOOKS_KEY) === false) return [PART_HOOKS];
     }
   } catch {
@@ -20911,8 +20946,8 @@ async function hookRow(ctx, adapter, host) {
       bundleDir: host.bundleDir,
       env: buildChildEnv(host.env),
       signal: ctx.signal,
-      codexConfigDir: join12(needHome(host.env), ...AGENT_HOME_DIR.codex),
-      // same Codex dir D3 reads
+      codexConfigDir: codexDirOf(host.env, needHome(host.env)),
+      // same Codex dir D3 reads (D-N6-CODEX-HOME-2)
       db
     });
   } finally {

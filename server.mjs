@@ -28312,7 +28312,7 @@ var DECISION_SOURCE = "decision";
 var DECISION_USER_LABEL = "decision (user)";
 var RELEASE_REPO_URL = "https://github.com/mksglu/context-mode.git";
 var RELEASE_BRANCH = "release";
-var BUNDLE_SHA = true ? "0bf5734278463ea178b282436a39ba81347dadab" : void 0;
+var BUNDLE_SHA = true ? "3374b3ce2faee35730f5c335678ca40b405e923c" : void 0;
 var DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"]);
 var DOCTOR_LABEL = Object.freeze({
   D1: "version",
@@ -28551,6 +28551,7 @@ var V1_HOOKS_DIR_NAME = "hooks";
 var SETTINGS_FILE = "settings.json";
 var CLAUDE_USER_CONFIG_FILE = ".claude.json";
 var HOOKS_JSON_FILE = "hooks.json";
+var CODEX_HOME_ENV = "CODEX_HOME";
 var CONFIG_TOML_FILE = "config.toml";
 var CONFIG_JSON_FILE = "config.json";
 var ZCODE_CLI_DIR = "cli";
@@ -28616,8 +28617,10 @@ var JSON_INDENT_UNIT = "  ";
 var MCP_COMMAND_FIELD = "command";
 var MCP_ARGS_FIELD = "args";
 var ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"]);
+var CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
+var CODEX_OMIT_DEFERRED = Object.freeze(["deferred"]);
 var OWN_MCP_ENTRY = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY] },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
@@ -29056,6 +29059,10 @@ function homeDirOf(env) {
   const profile = env.USERPROFILE;
   if (profile !== void 0 && profile !== "") return profile;
   return null;
+}
+function codexDirOf(env, home) {
+  const dir = env[CODEX_HOME_ENV];
+  return dir !== void 0 && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR.codex);
 }
 function homeOf(env) {
   const home = homeDirOf(env);
@@ -31536,16 +31543,23 @@ var TYPO_MIN_LEN = 5;
 var TYPO_MAX_DIST = 2;
 function typoTerms(db, words) {
   const has = stmt(db.raw, "SELECT 1 AS x FROM chunks_vocab WHERE term = ?");
-  const near = stmt(db.raw, "SELECT term, doc FROM chunks_vocab WHERE length(term) BETWEEN ? AND ?");
+  const near = stmt(db.raw, "SELECT term, doc, length(term) AS n FROM chunks_vocab WHERE length(term) BETWEEN ? AND ?");
+  const stems = queryStems(words.join(" "));
+  const miss = stems.map((stem) => has.get(stem) === void 0 && [...stem].length >= TYPO_MIN_LEN);
+  if (!miss.includes(true)) return null;
+  const lens = stems.filter((_, i) => miss[i]).map((stem) => stem.length);
+  const rows = near.all(Math.min(...lens) - TYPO_MAX_DIST, Math.max(...lens) + TYPO_MAX_DIST);
   let changed = false;
   const out = [];
-  for (const stem of queryStems(words.join(" "))) {
-    if (has.get(stem) !== void 0 || [...stem].length < TYPO_MIN_LEN) {
+  stems.forEach((stem, i) => {
+    if (!miss[i]) {
       out.push(stem);
-      continue;
+      return;
     }
     let best = null;
-    for (const r of near.all(stem.length - TYPO_MAX_DIST, stem.length + TYPO_MAX_DIST)) {
+    for (const r of rows) {
+      const n = Number(r.n);
+      if (n < stem.length - TYPO_MAX_DIST || n > stem.length + TYPO_MAX_DIST) continue;
       const d = editDistance(stem, r.term, TYPO_MAX_DIST);
       if (d > TYPO_MAX_DIST) continue;
       if (best === null || d < best.d || d === best.d && (r.doc > best.doc || r.doc === best.doc && r.term < best.term)) {
@@ -31556,7 +31570,7 @@ function typoTerms(db, words) {
       out.push(best.term);
       changed = true;
     }
-  }
+  });
   return changed ? out.map((t) => `"${t.replaceAll('"', '""')}"*`) : null;
 }
 function ftsQuery(db, q, scope, ctx, sessionId, limit, offset, source) {
@@ -45805,6 +45819,7 @@ function ownHooks(block, shape, timeoutKey, native, agent) {
 var validTimeout = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
 function mcpFile(row5, home, env) {
   const spec = OWN_MCP_ENTRY[row5.id];
+  if (row5.id === "codex") return join9(codexDirOf(env, home), CONFIG_TOML_FILE);
   if (spec !== void 0) return join9(home, ...spec.file);
   if (row5.id === "opencode") return join9(home, ...AGENT_HOME_DIR.opencode, OPENCODE_BASE_CONFIG_FILE);
   if (row5.id === "pi") {
@@ -45832,9 +45847,10 @@ function hookParts(row5, home, env, worktree) {
   let block;
   try {
     const root = spec.root === "plugin" ? resolvePluginRoot(row5, env) : spec.root === "home" ? home : worktree;
-    block = hostConfigValueAt(readParsed(row5.id, join9(root, ...spec.file)).value, spec.key);
+    const file2 = row5.id === "codex" ? join9(codexDirOf(env, home), HOOKS_JSON_FILE) : join9(root, ...spec.file);
+    block = hostConfigValueAt(readParsed(row5.id, file2).value, spec.key);
     if (row5.id === "codex") {
-      const config4 = readParsed(row5.id, join9(home, ...AGENT_HOME_DIR.codex, CONFIG_TOML_FILE)).value;
+      const config4 = readParsed(row5.id, join9(codexDirOf(env, home), CONFIG_TOML_FILE)).value;
       if (hostConfigValueAt(config4, CODEX_FEATURES_HOOKS_KEY) === false) return [PART_HOOKS];
     }
   } catch {
@@ -46230,8 +46246,8 @@ async function hookRow(ctx, adapter, host) {
       bundleDir: host.bundleDir,
       env: buildChildEnv(host.env),
       signal: ctx.signal,
-      codexConfigDir: join10(needHome(host.env), ...AGENT_HOME_DIR.codex),
-      // same Codex dir D3 reads
+      codexConfigDir: codexDirOf(host.env, needHome(host.env)),
+      // same Codex dir D3 reads (D-N6-CODEX-HOME-2)
       db
     });
   } finally {
