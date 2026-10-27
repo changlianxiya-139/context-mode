@@ -23,7 +23,7 @@ test("HOOK_HOST_FILE agrees with every adapter hookChannel (root kind and file p
 });
 
 test("vscode: the hook file is the user file ~/.copilot/hooks/context-mode-vscode.json, never a project .github/hooks file", () => {
-  // Documented (page fetched 2026-10-27): code.visualstudio.com/docs/copilot/customization/hooks, "Choose a hook source":
+  // Documented (page fetched 2026-10-28): code.visualstudio.com/docs/copilot/customization/hooks, "Choose a hook source":
   // personal hooks = "User hook files in ~/.copilot/hooks/"; repo-shared = ".github/hooks/*.json". Setup writes the user
   // file only (docs/install/vscode.md), so doctor D3 must read that same file.
   const spec = HOOK_HOST_FILE.vscode;
