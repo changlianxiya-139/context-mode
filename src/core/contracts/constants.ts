@@ -524,7 +524,8 @@ export const HASH_ENCODING = "hex";
 // plugin-swap.ts: atomic `current` swap (impl/07 §6 step 4c-4d).
 export const PLUGIN_LINK_TMP_SUFFIX = ".swap"; // symlink current.swap -> <sha>, then rename it to current
 export const PLUGIN_LINK_OLD_SUFFIX = ".old"; // current is renamed to current.old first (Windows: no rename over a dir link)
-export const PLUGIN_LINK_TYPE = "dir"; // fs.symlink type ("junction" is not used: one path)
+export const PLUGIN_LINK_TYPE = "dir"; // fs.symlink type on POSIX: relative <sha> target
+export const PLUGIN_LINK_TYPE_WIN32 = "junction"; // on win32 a dir symlink needs admin or Developer Mode (EPERM); a junction needs neither, absolute target (D-WIN-JUNCTION-1)
 // uninstall.ts: stop marker read by the owning server (impl/07 uninstall step 1, impl/02 §7).
 export const OWNER_STOP_EXT = ".stop"; // <projectDir>/owners/<serverId>.stop next to <serverId>.pid
 export const UPGRADE_DATA_DELETED = "user data deleted"; // uninstall step 4 with confirmDelete

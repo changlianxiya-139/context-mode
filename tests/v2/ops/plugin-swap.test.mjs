@@ -142,3 +142,67 @@ test("[win] plugin-swap/EPERM-that-never-clears-throws-and-keeps-old-current", (
   assert.throws(() => swapPluginCurrent(dir, "bbb", { platform: "win32", rename, sleep: () => {} }), /EPERM/);
   assert.equal(realpathSync(current(dir)), path.join(dir, "aaa"));
 });
+
+// DEVIATIONS D-WIN-JUNCTION-1 (PI-WIN-1): on Windows a `dir` symlink needs admin or Developer Mode (EPERM for a normal
+// user); a junction needs neither. Fake platform + injected symlink that refuses `dir` like Windows and stores the
+// junction target with a trailing slash (what readlink may return there): runs on every OS.
+function winSymlink(calls) {
+  return (target, link, type) => {
+    calls.push({ target, link: path.basename(link), type });
+    if (type !== "junction") throw Object.assign(new Error("EPERM: operation not permitted, symlink"), { code: "EPERM" });
+    symlinkSync(target + path.sep, link, "dir");
+  };
+}
+
+test("[win] plugin-swap/win32-makes-a-junction-with-an-absolute-target", (t) => {
+  const dir = agentDir(t);
+  const calls = [];
+  const opts = { platform: "win32", symlink: winSymlink(calls) };
+  version(dir, "aaa");
+  const r = swapPluginCurrent(dir, "aaa", opts);
+  assert.deepEqual(calls, [{ target: path.join(dir, "aaa"), link: "current.swap", type: "junction" }]);
+  assert.equal(realpathSync(current(dir)), path.join(dir, "aaa"));
+  assert.deepEqual(r, { current: path.join(dir, "aaa"), previous: null, removed: [] });
+});
+
+test("[win] plugin-swap/win32-junction-target-with-trailing-slash-is-read-as-the-sha", (t) => {
+  const dir = agentDir(t);
+  const calls = [];
+  const opts = { platform: "win32", symlink: winSymlink(calls), sleep: () => {} };
+  for (const sha of ["aaa", "bbb"]) { version(dir, sha); swapPluginCurrent(dir, sha, opts); }
+  calls.length = 0;
+  const same = swapPluginCurrent(dir, "bbb", opts);
+  assert.deepEqual(same, { current: path.join(dir, "bbb"), previous: null, removed: [] }, "same sha is a no-op");
+  assert.equal(calls.length, 0, "no new link for the sha that is already current");
+  version(dir, "ccc");
+  const r = swapPluginCurrent(dir, "ccc", opts);
+  assert.equal(r.previous, path.join(dir, "bbb"));
+  assert.deepEqual(r.removed, [path.join(dir, "aaa")]);
+  assert.ok(existsSync(path.join(dir, "bbb")), "the rollback generation is kept");
+  const back = swapPluginCurrent(dir, "bbb", opts);
+  assert.equal(back.previous, path.join(dir, "ccc"));
+  assert.equal(realpathSync(current(dir)), path.join(dir, "bbb"));
+});
+
+test("[win] plugin-swap/posix-keeps-the-relative-dir-link", (t) => {
+  const dir = agentDir(t);
+  const calls = [];
+  const symlink = (target, link, type) => { calls.push({ target, type }); symlinkSync(target, link, type); };
+  version(dir, "aaa");
+  swapPluginCurrent(dir, "aaa", { platform: "linux", symlink });
+  assert.deepEqual(calls, [{ target: "aaa", type: "dir" }]);
+  assert.equal(readlinkSync(current(dir)), "aaa");
+});
+
+// Windows only: a real junction, no fake. A normal user has no symlink privilege, so only this run proves it.
+test("[win] plugin-swap/real-junction-swap-and-rollback", { skip: process.platform !== "win32" && "junctions are a Windows feature" }, (t) => {
+  const dir = agentDir(t);
+  for (const sha of ["aaa", "bbb"]) { version(dir, sha); swapPluginCurrent(dir, sha); }
+  assert.ok(lstatSync(current(dir)).isSymbolicLink());
+  assert.equal(realpathSync.native(current(dir)), path.join(dir, "bbb"));
+  assert.equal(swapPluginCurrent(dir, "bbb").previous, null);
+  const back = swapPluginCurrent(dir, "aaa");
+  assert.equal(back.previous, path.join(dir, "bbb"));
+  assert.equal(realpathSync.native(current(dir)), path.join(dir, "aaa"));
+  assert.equal(existsSync(path.join(dir, "current.old")), false);
+});

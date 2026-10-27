@@ -2,9 +2,9 @@
 // rollback generation (PLUGIN_ROLLBACK_GENERATIONS), delete the generation two back. DEVIATIONS D-M5-U1-6, D-M5-U4-1,
 // D-M7-W3-1 (Windows cannot rename a link over a dir link: move `current` aside, then move `current.swap` in).
 import { existsSync, lstatSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, win32 } from "node:path";
 import {
-  PLUGIN_CURRENT_LINK, PLUGIN_LINK_OLD_SUFFIX, PLUGIN_LINK_TMP_SUFFIX, PLUGIN_LINK_TYPE, UPGRADE_FETCH_DIR_PREFIX,
+  PLUGIN_CURRENT_LINK, PLUGIN_LINK_OLD_SUFFIX, PLUGIN_LINK_TMP_SUFFIX, PLUGIN_LINK_TYPE, PLUGIN_LINK_TYPE_WIN32, UPGRADE_FETCH_DIR_PREFIX,
   UPGRADE_TRASH_SUFFIX,
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
@@ -16,9 +16,16 @@ export interface PluginSwapResult {
   removed: string[]; // version dirs deleted (the generation two back), sorted
 }
 
-// The link target, as written by this file: a bare <sha> relative to agentDir. null when no link exists.
-function linkTarget(path: string): string | null {
-  return isLink(path) ? readlinkSync(path) : null;
+export interface PluginSwapOptions extends AtomicOptions {
+  symlink?: (target: string, path: string, type: "dir" | "junction") => void; // a test fakes the OS link call
+}
+
+// The sha a link points at. POSIX writes a bare <sha>; a Windows junction holds an absolute path that readlink may
+// return with a trailing separator or a \\?\ prefix, so the last path part is the sha. null when no link exists.
+function linkTarget(path: string, win: boolean): string | null {
+  if (!isLink(path)) return null;
+  const target = readlinkSync(path);
+  return win ? win32.basename(target) : target;
 }
 
 function isLink(path: string): boolean {
@@ -37,7 +44,7 @@ function generations(agentDir: string): string[] {
 
 // A run that stopped between the two renames left `current.old` and no `current`: put the old link back, so the
 // state is the one before that run. A stale `current.swap` or `current.old` next to a live `current` is removed.
-function settleLinks(link: string, tmp: string, old: string, opts: AtomicOptions): void {
+function settleLinks(link: string, tmp: string, old: string, opts: PluginSwapOptions): void {
   if (isLink(tmp)) unlinkSync(tmp);
   if (!isLink(old)) return;
   if (isLink(link)) unlinkSync(old);
@@ -50,10 +57,11 @@ function settleLinks(link: string, tmp: string, old: string, opts: AtomicOptions
  * cannot rename a link over an existing dir link (EPERM). Between the two renames `current` is missing for one
  * rename call; a stop there is undone by the next call. Then keeps <sha> and the dir `current` pointed at before,
  * and deletes every other version dir. Swapping to the sha already current changes nothing.
- * Rollback is the same call with the previous sha. DEVIATIONS D-WIN-ATOMIC-2: both renames retry a Windows
+ * Rollback is the same call with the previous sha. DEVIATIONS D-WIN-JUNCTION-1: on win32 the link is a junction with
+ * an absolute target (no privilege needed); elsewhere a `dir` symlink with the bare <sha>. DEVIATIONS D-WIN-ATOMIC-2: both renames retry a Windows
  * "file in use" error (EPERM/EBUSY/EACCES); `opts` lets a test fake the platform and the rename.
  */
-export function swapPluginCurrent(agentDir: string, sha: string, opts: AtomicOptions = {}): PluginSwapResult {
+export function swapPluginCurrent(agentDir: string, sha: string, opts: PluginSwapOptions = {}): PluginSwapResult {
   const next = join(agentDir, sha);
   if (!existsSync(next) || !lstatSync(next).isDirectory()) {
     throw new CtxError("PLUGIN_ROOT_MISSING", { agent: basename(agentDir), path: next });
@@ -62,10 +70,13 @@ export function swapPluginCurrent(agentDir: string, sha: string, opts: AtomicOpt
   const tmp = link + PLUGIN_LINK_TMP_SUFFIX;
   const old = link + PLUGIN_LINK_OLD_SUFFIX;
   settleLinks(link, tmp, old, opts);
-  const before = linkTarget(link);
+  const win = (opts.platform ?? process.platform) === "win32";
+  const before = linkTarget(link, win);
   if (before === sha) return { current: next, previous: null, removed: [] };
 
-  symlinkSync(sha, tmp, PLUGIN_LINK_TYPE);
+  const symlink = opts.symlink ?? symlinkSync;
+  if (win) symlink(next, tmp, PLUGIN_LINK_TYPE_WIN32);
+  else symlink(sha, tmp, PLUGIN_LINK_TYPE);
   if (before !== null) renameWithRetry(link, old, opts);
   renameWithRetry(tmp, link, opts);
   if (before !== null) unlinkSync(old);
