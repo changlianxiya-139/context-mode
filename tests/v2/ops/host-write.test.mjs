@@ -168,3 +168,33 @@ test("[win] host-write/busy-rename-gives-up-names-the-file-and-keeps-the-origina
   assert.equal(JSON.parse(readFileSync(file, "utf8")).keep, 1);
   assert.deepEqual(readdirSync(dir), ["opencode.json"], "no tmp or trash file left behind");
 });
+
+// CP-WIN-3 / D-WIN-ATOMIC-5: fake win32 + injected rename/unlink, so these run on every OS.
+const busy = (code, op) => Object.assign(new Error(`${code}: busy, ${op}`), { code });
+
+test("[win] host-write/restore-rename-held-names-the-file-and-where-the-original-is", (t) => {
+  const home = tmp(t);
+  const dir = path.join(home, ".config", "opencode");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "opencode.json");
+  writeFileSync(file, JSON.stringify({ plugin: ["p1"] }), "utf8");
+  const rename = () => { throw busy("EBUSY", "rename"); };
+  assert.throws(
+    () => regenerateHostConfig(getAdapter("opencode"), home, { env: {}, atomic: { platform: "win32", rename, sleep: () => {} } }),
+    (e) => e.message.includes(file) && e.message.includes("Fix: close the program using") && e.message.includes(".ctx-upgrade-removing"),
+  );
+});
+
+test("[win] host-write/trash-file-held-after-a-good-write-is-not-a-failure", (t) => {
+  const home = tmp(t);
+  const dir = path.join(home, ".config", "opencode");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "opencode.json");
+  writeFileSync(file, JSON.stringify({ plugin: ["p1"] }), "utf8");
+  const unlinked = [];
+  const unlink = (f) => { unlinked.push(f); throw busy("EBUSY", "unlink"); };
+  const rows = regenerateHostConfig(getAdapter("opencode"), home, { env: {}, atomic: { platform: "win32", unlink, sleep: () => {} } });
+  assert.ok(rows.length > 0);
+  assert.ok(unlinked.some((f) => f.endsWith(".ctx-upgrade-removing")), "trash is removed through the retrying helper");
+  assert.ok(JSON.parse(readFileSync(file, "utf8")).plugin.includes("p1"));
+});

@@ -8,7 +8,7 @@ import {
   SETTINGS_FILE, UPGRADE_AREA_KEY_SEP, UPGRADE_TRASH_SUFFIX,
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
-import { type AtomicOptions, renameWithRetry, replaceFailure } from "./atomic-file.ts";
+import { type AtomicOptions, renameWithRetry, replaceFailure, unlinkWithRetry } from "./atomic-file.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 import { withLayout } from "./host-text.ts";
 
@@ -56,11 +56,15 @@ function writeWithRollback(file: string, text: string, write: HostFileWriter, at
     renameWithRetry(tmp, file, atomic);
   } catch (err) {
     rmSync(tmp, { force: true });
-    if (had) renameWithRetry(trash, file, atomic);
-    else rmSync(file, { force: true });
+    if (!had) { rmSync(file, { force: true }); throw replaceFailure(file, err); }
+    try { renameWithRetry(trash, file, atomic); } catch (restoreErr) {
+      // D-WIN-ATOMIC-5: the host holds the file; the original stays in the trash copy, so say where it is.
+      throw new Error(`${replaceFailure(file, err).message}. The original is kept at ${trash}`, { cause: restoreErr });
+    }
     throw replaceFailure(file, err);
   }
-  rmSync(trash, { force: true });
+  // The new file is in place. A held trash copy is a leftover, not a failed write.
+  try { unlinkWithRetry(trash, atomic); } catch { /* leftover backup copy; the next run overwrites it */ }
 }
 
 /** impl/07 §6 step 5: read the agent's host config, regenerate context-mode's own entries, write it back with
