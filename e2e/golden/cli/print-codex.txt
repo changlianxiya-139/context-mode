@@ -4,6 +4,7 @@ and keep the rest. These paths are for this machine.)
 
 [mcp_servers.context-mode]
 omit_tools_from = ["deferred"]
+default_tools_approval_mode = "approve"
 command = "<NODE>"
 args = ["<PKG>/server.mjs", "--agent", "codex"]
 

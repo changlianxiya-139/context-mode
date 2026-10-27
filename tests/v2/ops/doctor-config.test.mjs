@@ -33,7 +33,7 @@ function codexInstall(home, opts = {}) {
   put(path.join(codexDir, "hooks.json"), { hooks });
   // JSON string escapes are TOML basic-string escapes: a Windows path keeps its backslashes (D-M3-F-9 rule).
   const serverArgs = JSON.stringify([path.join(path.dirname(process.argv[1] ?? ""), "server.mjs"), "--agent", "codex"]);
-  put(path.join(codexDir, "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\nomit_tools_from = ["deferred"]\n`);
+  put(path.join(codexDir, "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\nomit_tools_from = ["deferred"]\ndefault_tools_approval_mode = "approve"\n`);
   return row;
 }
 
@@ -179,5 +179,14 @@ test("[D-N6-CODEX-DIRECT-1] doctor-config/D3 names the MCP entry when the codex 
   const file = path.join(home, ".codex", "config.toml");
   const text = readFileSync(file, "utf8");
   put(file, text.split('omit_tools_from = ["deferred"]\n').join(""));
+  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry");
+});
+
+test("[D-N7-CODEX-APPROVE-1] doctor-config/D3 names the MCP entry when the codex entry lacks default_tools_approval_mode approve", (t) => {
+  const home = tmp(t);
+  const row = codexInstall(home);
+  const file = path.join(home, ".codex", "config.toml");
+  const text = readFileSync(file, "utf8");
+  put(file, text.split('default_tools_approval_mode = "approve"\n').join(""));
   assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry");
 });

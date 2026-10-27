@@ -94,7 +94,7 @@ test("[M5] doctor/codex-effective-hooks-state-no-features-hooks-key-means-true (
   put(path.join(home, ".codex", "hooks.json"), { hooks });
   // JSON string escapes are TOML basic-string escapes: a Windows path keeps its backslashes (D-M3-F-9 rule).
   const serverArgs = JSON.stringify([path.join(path.dirname(process.argv[1] ?? ""), "server.mjs"), "--agent", "codex"]);
-  put(path.join(home, ".codex", "config.toml"), `model = "o1"\n\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\nomit_tools_from = ["deferred"]\n`);
+  put(path.join(home, ".codex", "config.toml"), `model = "o1"\n\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\nomit_tools_from = ["deferred"]\ndefault_tools_approval_mode = "approve"\n`);
   const d3 = (await doctor(home, "codex")).rows.find((r) => r.id === "D3");
   assert.equal(d3.status, "PASS", d3.detail);
 });

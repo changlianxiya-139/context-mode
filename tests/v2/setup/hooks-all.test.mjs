@@ -301,3 +301,20 @@ test("[D-N6-CODEX-DIRECT-1] setup writes omit_tools_from = [\"deferred\"] in the
   const toml = parseHostConfig("codex", file, readFileSync(file, "utf8"), "toml");
   assert.deepEqual(hostConfigValueAt(toml, ["mcp_servers", "context-mode", "omit_tools_from"]), ["deferred"]);
 });
+
+// N7 (2.0.0-next.6 codex exec run): approval policy "never" refused the ctx_execute call ("MCP tool call requires
+// approval, but approval policy is never"), so the model fell back to rg. Codex's per-server key
+// default_tools_approval_mode = "approve" (codex-rs config/src/mcp_types.rs RawMcpServerConfig; AppToolApproval
+// auto|prompt|approve) lets our own read-only ctx tools run without approval; the plugin mcp.json sets the same key.
+test("[D-N7-CODEX-APPROVE-1] setup writes default_tools_approval_mode = \"approve\" in the codex MCP entry", async (t) => {
+  const { parseHostConfig, hostConfigValueAt } = await import("../../../src/core/ops/host-config.ts");
+  const s = sandbox(t);
+  const codexHome = path.join(s.root, "codex-home");
+  const env = { ...s.env, CODEX_HOME: codexHome };
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env, agents: ["codex"], runId: "ca" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  const file = path.join(codexHome, "config.toml");
+  const toml = parseHostConfig("codex", file, readFileSync(file, "utf8"), "toml");
+  assert.equal(hostConfigValueAt(toml, ["mcp_servers", "context-mode", "default_tools_approval_mode"]), "approve");
+  assert.deepEqual(hostConfigValueAt(toml, ["mcp_servers", "context-mode", "omit_tools_from"]), ["deferred"]);
+});

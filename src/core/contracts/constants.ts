@@ -640,8 +640,13 @@ export const ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"] as const)
 // config/src/mcp_types.rs, core/src/tools/spec_plan.rs apply_mcp_tool_exposure_policy) makes them direct tools.
 export const CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
 export const CODEX_OMIT_DEFERRED: readonly string[] = Object.freeze(["deferred"]);
+// D-N7-CODEX-APPROVE-1: Codex asks approval for MCP tool calls; under approval policy "never" the call is refused.
+// default_tools_approval_mode = "approve" (codex-rs config/src/mcp_types.rs RawMcpServerConfig, AppToolApproval
+// auto|prompt|approve) lets our own read-only ctx tools run, the same key the plugin mcp.json sets.
+export const CODEX_APPROVAL_MODE_FIELD = "default_tools_approval_mode";
+export const CODEX_APPROVAL_APPROVE = "approve";
 export const OWN_MCP_ENTRY: Readonly<Partial<Record<AgentId, OwnMcpEntry>>> = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED, [CODEX_APPROVAL_MODE_FIELD]: CODEX_APPROVAL_APPROVE } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
