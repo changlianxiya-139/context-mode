@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -313,6 +313,9 @@ test("[RN] publish/gh-prerelease: a version with a '-' part is a prerelease and 
     const env = { ...ENV, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
     const r = spawnSync(process.execPath, [SCRIPT, "--promote", "--version", version, "--notes", "n"], { cwd: work, encoding: "utf8", env });
     assert.equal(r.status, 0, r.stderr);
+    // D-RN-ORDER-1: the GitHub release is its own step, run only after npm publish.
+    const g = spawnSync(process.execPath, [SCRIPT, "--github-release", "--version", version, "--notes", "n"], { cwd: work, encoding: "utf8", env });
+    assert.equal(g.status, 0, g.stderr);
     const argv = readFileSync(path.join(bin, "argv"), "utf8").trim().split(" ");
     assert.deepEqual(argv.slice(0, 4), ["release", "create", `v${version}`, "--verify-tag"], version);
     assert.equal(argv.includes("--prerelease"), pre, version);
@@ -320,4 +323,67 @@ test("[RN] publish/gh-prerelease: a version with a '-' part is a prerelease and 
     assert.ok(!argv.includes("--latest") && !argv.includes("--latest=true"), version);
     assert.equal(remoteRef(bare, `refs/tags/v${version}^{commit}`), pre ? src : remoteRef(bare, "refs/heads/release"), version);
   }
+});
+
+// D-RN-ORDER-1: run 40496186557 (v2.0.0-next.4) made the GitHub prerelease in publish-promote, then npm publish
+// failed, so GitHub showed a release that npm did not have. --promote now moves `release` and pushes the tag only;
+// --github-release makes the GitHub release, and release.yml runs it only after publish-npm succeeds.
+test("[N5] publish/promote-no-gh: promote on origin moves release and pushes the tag, but makes no GitHub release (D-RN-ORDER-1)", posixGh, (t) => {
+  const { bare, work } = fixture(t);
+  artifact(work, "b");
+  assert.equal(publish(work, "--stage", "--version", "2.0.0-next.5", "--source-commit", SRC).status, 0);
+  const staged = remoteRef(bare, "refs/heads/release-staging");
+  const bin = stubGh(t);
+  const env = { ...ENV, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+  const r = spawnSync(process.execPath, [SCRIPT, "--promote", "--version", "2.0.0-next.5"], { cwd: work, encoding: "utf8", env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(remoteRef(bare, "refs/heads/release"), staged);
+  assert.equal(remoteRef(bare, "refs/tags/v2.0.0-next.5^{commit}"), staged);
+  assert.equal(existsSync(path.join(bin, "argv")), false, "promote never calls gh");
+});
+
+test("[N5] publish/github-release: makes the GitHub release for the pushed tag with SHA256SUMS (D-RN-ORDER-1)", posixGh, (t) => {
+  const { bare, work } = fixture(t);
+  const src = pushTag(work, bare, "v2.0.0-next.5");
+  artifact(work, "b");
+  const bin = stubGh(t);
+  const env = { ...ENV, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+  const r = spawnSync(process.execPath, [SCRIPT, "--github-release", "--version", "2.0.0-next.5", "--notes", "n"], { cwd: work, encoding: "utf8", env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(readFileSync(path.join(bin, "argv"), "utf8").trim(),
+    `release create v2.0.0-next.5 --verify-tag --prerelease --latest=false --title v2.0.0-next.5 --notes n ${path.join("release-out", "SHA256SUMS")}`);
+  assert.equal(remoteRef(bare, "refs/tags/v2.0.0-next.5^{commit}"), src, "tag untouched");
+});
+
+test("[N5] publish/github-release-no-tag: the tag is not on the remote -> refuse, gh not called (D-RN-ORDER-1)", posixGh, (t) => {
+  const { work } = fixture(t);
+  artifact(work, "b");
+  const bin = stubGh(t);
+  const env = { ...ENV, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+  const r = spawnSync(process.execPath, [SCRIPT, "--github-release", "--version", "2.0.0-next.5", "--notes", "n"], { cwd: work, encoding: "utf8", env });
+  assert.equal(r.status, 1);
+  assert.equal(r.stderr, "release failed: tag v2.0.0-next.5 is not on origin; promote pushes it first\n");
+  assert.equal(existsSync(path.join(bin, "argv")), false);
+});
+
+test("[N5] publish/github-release-args: exactly one mode; --github-release needs --version (D-RN-ORDER-1)", (t) => {
+  const { work } = fixture(t);
+  const cases = [
+    [["--github-release", "--promote", "--version", "2.0.0"], "release failed: pass exactly one of --stage, --promote or --github-release\n"],
+    [["--github-release"], "release failed: --version <x.y.z> is required\n"],
+  ];
+  for (const [args, want] of cases) {
+    const r = publish(work, ...args);
+    assert.equal(r.status, 1, args.join(" "));
+    assert.equal(r.stderr, want, args.join(" "));
+  }
+});
+
+test("[N5] publish/github-release-non-origin: a non-default remote skips gh, as promote did (D-M6-arch-5)", (t) => {
+  const { bare, work } = fixture(t);
+  pushTag(work, bare, "v2.0.0");
+  artifact(work, "b");
+  const r = publish(work, "--github-release", "--version", "2.0.0", "--notes", "n", "--remote", bare);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes("gh release skipped"), r.stdout);
 });

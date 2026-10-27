@@ -1,10 +1,10 @@
 // Release-next dry run (DEVIATIONS D-RN-TAG-1): the release.yml path for a pushed v2.* tag, run locally against
-// a bare temp remote. plan.mjs --tag -> publish.mjs --stage -> publish.mjs --promote (fresh checkout) with a
-// stub gh. Nothing leaves the machine; npm is never called.
+// a bare temp remote. plan.mjs --tag -> publish.mjs --stage -> publish.mjs --promote (fresh checkout) -> publish.mjs
+// --github-release (fresh checkout) with a stub gh. Nothing leaves the machine; npm is never called.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,8 +86,18 @@ test("[RN] release-next dry run: tag v2.0.0-next.1 -> plan, stage, promote; one 
   mkdirSync(bin);
   writeFileSync(path.join(bin, "gh"), `#!/bin/sh\nfor a in "$@"; do printf '%s\\0' "$a"; done > "${bin}/argv"\n`, { mode: 0o755 });
   const env = { ...ENV, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
-  const r = node(promoteDir, PUBLISH, ["--promote", "--version", VERSION, "--notes", notes], env);
+  const r = node(promoteDir, PUBLISH, ["--promote", "--version", VERSION], env);
   assert.equal(r.status, 0, r.stderr);
+  assert.equal(existsSync(path.join(bin, "argv")), false, "promote makes no GitHub release (D-RN-ORDER-1)");
+
+  // publish-npm runs here (not in this test). github-release job, only after it succeeds: fresh checkout, artifact.
+  const ghDir = path.join(root, "gh-release");
+  git(root, "clone", "-q", bare, ghDir);
+  git(ghDir, "checkout", "-q", "--detach", src);
+  mkdirSync(path.join(ghDir, "release-out"));
+  writeFileSync(path.join(ghDir, "release-out", "SHA256SUMS"), "sums");
+  const g = node(ghDir, PUBLISH, ["--github-release", "--version", VERSION, "--notes", notes], env);
+  assert.equal(g.status, 0, g.stderr);
 
   assert.equal(remoteRef(bare, "refs/heads/release"), staged, "release = release-staging");
   assert.equal(remoteRef(bare, `refs/tags/${TAG}`), tagObject, "one tag: the pushed one, never re-made");

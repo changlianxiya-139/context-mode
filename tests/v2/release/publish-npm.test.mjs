@@ -79,3 +79,34 @@ test("[RN] release.yml: publish-npm stays --tag next and never names latest", ()
   const latest = yml.split("\n").filter((l) => l.includes("latest") && !l.includes("-latest") && !l.trim().startsWith("- name:"));
   assert.deepEqual(latest, [], "no release.yml command names latest (runner labels and step names aside)");
 });
+
+// D-RN-ORDER-1: run 40496186557 (v2.0.0-next.4) made the GitHub prerelease in publish-promote, then publish-npm failed.
+// The GitHub release is now its own job: it runs after publish-npm, and only when npm publish succeeded or was not asked for.
+const jobOf = (name) => {
+  const start = yml.indexOf(`\n  ${name}:`);
+  assert.ok(start > 0, `job ${name} exists`);
+  const rest = yml.slice(start + 1);
+  const next = rest.split("\n").findIndex((l, i) => i > 0 && l.startsWith("  ") && !l.startsWith("   ") && l.trim().endsWith(":"));
+  return next < 0 ? rest : rest.split("\n").slice(0, next).join("\n");
+};
+
+test("[N5] release.yml: publish-promote makes no GitHub release (D-RN-ORDER-1)", () => {
+  const promote = jobOf("publish-promote");
+  assert.ok(promote.includes('run: node scripts/release/publish.mjs --promote --version "$VERSION"'), promote);
+  for (const s of ["GH_TOKEN", "--notes", "NOTES", "--github-release"]) assert.ok(!promote.includes(s), s);
+});
+
+test("[N5] release.yml: github-release job needs publish-npm and runs only when npm publish succeeded or was not asked for (D-RN-ORDER-1)", () => {
+  const gh = jobOf("github-release");
+  assert.ok(gh.includes("needs: [plan, publish-promote, publish-npm]"), gh);
+  const cond = gh.split("\n").find((l) => l.trim().startsWith("if:"));
+  assert.equal(cond.trim(), "if: ${{ !cancelled() && inputs.mode != 'rollback' && needs.publish-promote.result == 'success' && " +
+    "(needs.publish-npm.result == 'success' || (needs.publish-npm.result == 'skipped' && !inputs.publish && !startsWith(github.ref, 'refs/tags/v2.'))) }}");
+  for (const s of ["contents: write", "GH_TOKEN: ${{ github.token }}", "VERSION: ${{ needs.plan.outputs.version }}",
+    "NOTES: ${{ needs.plan.outputs.notes }}", "name: release-out",
+    'run: node scripts/release/publish.mjs --github-release --version "$VERSION" --notes "$NOTES"']) assert.ok(gh.includes(s), s);
+  for (const r of gh.split("\n").filter((l) => l.trim().startsWith("run:"))) assert.ok(!r.includes("${{"), r);
+  assert.ok(!gh.includes("environment:"), "no npm-publish environment: no second approval for the GitHub release");
+  assert.ok(yml.indexOf("\n  publish-npm:") < yml.indexOf("\n  github-release:"), "job order in the file follows the run order");
+  assert.equal(yml.split("--github-release").length - 1, 1, "one place makes the GitHub release");
+});
