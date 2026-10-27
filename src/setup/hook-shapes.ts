@@ -28,10 +28,14 @@ function nestedShape(row: AdapterRow, cmd: string, timeout: number, withMatcher:
   return { hooks };
 }
 
-// {version:1,hooks:{<Event>:[{type,command,<timeoutKey>}]}} — copilot-cli (timeoutSec), vscode (timeout).
+// {version:1,hooks:{<Event>:[{type,command,powershell,<timeoutKey>}]}} — copilot-cli (timeoutSec), vscode (timeout).
+// D-HW-PS-1: the Copilot harness runs `command` through PowerShell on Windows unless a `powershell` field is set
+// (docs.github.com/en/copilot/reference/hooks-reference). PowerShell reads a leading quoted path as a string, so the
+// explicit field starts with the call operator; sh and cmd.exe keep `command`.
+const POWERSHELL_CALL = "& ";
 function flatShape(row: AdapterRow, cmd: string, timeoutKey: string): JsonObject {
   const hooks: JsonObject = {};
-  for (const [, native] of events(row)) hooks[native] = [{ ...entry(cmd), [timeoutKey]: seconds(row) }];
+  for (const [, native] of events(row)) hooks[native] = [{ ...entry(cmd), powershell: POWERSHELL_CALL + cmd, [timeoutKey]: seconds(row) }];
   return { version: 1, hooks };
 }
 
