@@ -1,14 +1,14 @@
 // impl/07 §6 step 5 (config regeneration), §2 (readHostConfig, mergeOwnEntries, #849 .jsonc pick);
 // DEVIATIONS D-M5-O1-3, D-M5-O1-4, D-M5-U1-6, D-M5-U5-1. One write path: copy the original to
 // <file>UPGRADE_TRASH_SUFFIX, write <file>.tmp, rename over <file>; any failure puts the original back.
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   AGENT_HOME_DIR, HOST_CONFIG_TMP_SUFFIX, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, PI_AGENT_DIR, PI_AGENT_DIR_ENV,
   SETTINGS_FILE, UPGRADE_AREA_KEY_SEP, UPGRADE_TRASH_SUFFIX,
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
-import { type AtomicOptions, renameWithRetry, replaceFailure, unlinkWithRetry } from "./atomic-file.ts";
+import { type AtomicOptions, removeTmpFile, renameWithRetry, replaceFailure, unlinkWithRetry } from "./atomic-file.ts";
 import { opencodeDirOf } from "../project/config-dir.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 import { withLayout } from "./host-text.ts";
@@ -56,8 +56,8 @@ function writeWithRollback(file: string, text: string, write: HostFileWriter, at
     write(tmp, text);
     renameWithRetry(tmp, file, atomic);
   } catch (err) {
-    rmSync(tmp, { force: true });
-    if (!had) { rmSync(file, { force: true }); throw replaceFailure(file, err); }
+    removeTmpFile(tmp, atomic);
+    if (!had) { removeTmpFile(file, atomic); throw replaceFailure(file, err); }
     try { renameWithRetry(trash, file, atomic); } catch (restoreErr) {
       // D-WIN-ATOMIC-5: the host holds the file; the original stays in the trash copy, so say where it is.
       throw new Error(`${replaceFailure(file, err).message}. The original is kept at ${trash}`, { cause: restoreErr });

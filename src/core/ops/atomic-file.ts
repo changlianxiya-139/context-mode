@@ -1,7 +1,7 @@
 // DEVIATIONS D-WIN-ATOMIC-1. The one place that replaces a file by rename. On Windows a rename over a file that
 // another process holds open (the host watching settings.json, antivirus, an indexer) fails with EPERM/EBUSY/EACCES;
 // the hold is short, so retry a few times, then fail with the file name and what to close.
-import { mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { ATOMIC_RENAME_BUSY_CODES, ATOMIC_RENAME_DELAY_MS, ATOMIC_RENAME_RETRIES, ATOMIC_TMP_MARK, ATOMIC_TMP_PREFIX } from "../contracts/constants.ts";
@@ -58,6 +58,12 @@ export function replaceFailure(file: string, e: unknown): Error {
     : `Could not write ${file}: ${cause}. Fix: check the path and its permissions, then re-run`, { cause: e });
 }
 
+/** Remove a leftover file (the tmp file, or a file a failed first write created) after a failed write. A tmp file the host or a scanner still holds must not hide the
+ *  real error, so a failure here is dropped: the next run writes its own pid-named tmp file. DEVIATIONS D-WIN-ATOMIC-6. */
+export function removeTmpFile(tmp: string, opts: AtomicOptions = {}): void {
+  try { unlinkWithRetry(tmp, opts); } catch { /* leftover tmp file; the caller reports the write error */ }
+}
+
 /** Write `text` to a tmp file next to `file`, then rename it over `file`. On failure the tmp file is removed,
  *  the old `file` is untouched, and the error names `file`. */
 export function atomicWriteFile(file: string, text: string, opts: AtomicOptions = {}): void {
@@ -67,7 +73,7 @@ export function atomicWriteFile(file: string, text: string, opts: AtomicOptions 
     writeFileSync(tmp, text);
     renameWithRetry(tmp, file, opts);
   } catch (e) {
-    rmSync(tmp, { force: true });
+    removeTmpFile(tmp, opts);
     throw replaceFailure(file, e);
   }
 }

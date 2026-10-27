@@ -129,3 +129,19 @@ test("[win] atomic-file/unlink-of-a-missing-file-is-not-an-error", () => {
 test("[win] atomic-file/setup-rollback-has-no-bare-unlinkSync", () => {
   assert.equal(readFileSync(path.join(import.meta.dirname, "../../..", "src/setup/engine.ts"), "utf8").includes("unlinkSync("), false);
 });
+
+// PI-WIN-3 / D-WIN-ATOMIC-6: on failure the tmp file is removed through the retrying unlink, and a tmp file that
+// stays held (antivirus scanning it) never hides the rename error that the user must see.
+test("[win] atomic-file/failed-write-removes-tmp-with-the-retrying-unlink", (t) => {
+  const dir = tmp(t);
+  const file = path.join(dir, "settings.json");
+  const removed = [];
+  const { rename } = failing("EBUSY", 99, () => {});
+  const unlink = (f) => { removed.push(f); throw Object.assign(new Error("EBUSY: tmp held"), { code: "EBUSY" }); };
+  assert.throws(
+    () => atomicWriteFile(file, "new", { platform: "win32", rename, unlink, sleep: noSleep }),
+    (e) => e.message.includes("Could not replace " + file) && e.message.includes("Fix: close the program using") && !e.message.includes("tmp held"),
+  );
+  assert.equal(removed.length, ATOMIC_RENAME_RETRIES + 1);
+  assert.ok(removed.every((f) => path.dirname(f) === dir && f.includes("settings.json")), removed.join());
+});
