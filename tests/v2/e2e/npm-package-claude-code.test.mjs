@@ -2,6 +2,7 @@
 // the 200 KB fixture with one FATAL line, the transcript scorer and the login isolation env. No model calls.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { fatalLog, FATAL_VALUE, scoreArm, childEnv, PROMPT } from "../../../e2e/live/npm-package/claude-code.mjs";
 
 const L = (o) => JSON.stringify(o);
@@ -53,7 +54,7 @@ test("childEnv: own HOME, config dir under that HOME, no API key, no parent CLAU
   try {
     const e = childEnv("/sb/home", "/sb/bin:/x");
     assert.equal(e.HOME, "/sb/home");
-    assert.equal(e.CLAUDE_CONFIG_DIR, "/sb/home/.claude");
+    assert.equal(e.CLAUDE_CONFIG_DIR, path.join("/sb/home", ".claude"));
     assert.equal(e.PATH, "/sb/bin:/x");
     assert.equal(e.ANTHROPIC_API_KEY, undefined);
     assert.equal(e.ENABLE_CLAUDEAI_MCP_SERVERS, "false");
