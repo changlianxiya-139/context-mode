@@ -33,3 +33,20 @@ test("Q-WIN-4: package hook commands start with bare node and quote the spaced p
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// CP-WIN-1 / VS-WIN-1 (D-WIN-FLATPKG-1): copilot-cli and vscode ship a flat shape (no nested hooks array). The shipped
+// command is bare `node hook.mjs --agent <id>`: no quoted first token, so PowerShell parses it with no `&`.
+test("CP-WIN-1, VS-WIN-1: shipped copilot-cli and vscode hook commands start with bare node (valid in PowerShell, cmd, sh)", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "cm-pkg-flat-"));
+  try {
+    generateManifests(dir);
+    for (const id of ["copilot-cli", "vscode"]) {
+      const hooks = JSON.parse(readFileSync(path.join(dir, "hooks", id + ".json"), "utf8")).hooks;
+      const cmds = [...new Set(Object.values(hooks).flatMap((entries) => entries.map((h) => h.command)))];
+      assert.equal(cmds.length, 1, id + ": one command for every event");
+      assert.ok(cmds[0].startsWith("node "), id + ": first token is bare node: " + cmds[0]);
+      assert.ok(!cmds[0].startsWith('"') && !cmds[0].includes("${"), id + ": no leading quote, no placeholder");
+      assert.ok(cmds[0].endsWith(" --agent " + id), id + ": " + cmds[0]);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
