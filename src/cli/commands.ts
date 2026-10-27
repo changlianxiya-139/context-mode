@@ -341,10 +341,18 @@ async function doctor(ui: Ui): Promise<number> {
   return worst;
 }
 
+/** D-US-1: 2.0.0-next.900 came from the "next" dist-tag, 2.0.1 from "latest"; upgrade stays on that channel. */
+function channelOf(version: string): string {
+  const dash = version.indexOf("-");
+  if (dash < 0) return "latest";
+  const pre = version.slice(dash + 1).split(".")[0];
+  return pre === "" ? "latest" : pre;
+}
+
 async function upgrade(ui: Ui): Promise<number> {
   const { f } = ui;
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const spec = `context-mode@${f.tag}`; // --tag is checked against TAG_RE in args.ts
+  const spec = `context-mode@${f.tag ?? channelOf(ui.env.version)}`; // --tag is checked against TAG_RE in args.ts
   const install = `npm i -g ${spec}`;
   const agentArgs = f.agents ? ["--agents", f.agents.join(",")] : [];
   const repairArgs = ["setup", "--repair", "--yes", ...agentArgs, ...(f.json ? ["--json"] : []), ...(f.quiet ? ["--quiet"] : [])];

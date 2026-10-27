@@ -417,3 +417,57 @@ exit 0`);
   assert.equal(res.agents[0].status, "PASS", JSON.stringify(res.agents[0], null, 2));
   assert.ok(readFileSync(log, "utf8").includes("mcp list --pure"), readFileSync(log, "utf8"));
 });
+
+// D-US-1 (upgrade-sync): Claude Code runs a copy of the package under ~/.claude/plugins/cache/<mp>/context-mode/<version>
+// and records it in ~/.claude/plugins/installed_plugins.json. npm i -g does not refresh that copy.
+function installedPlugins(home, version) {
+  return JSON.stringify({ version: 2, plugins: { "context-mode@context-mode": [{ scope: "user", installPath: path.join(home, ".claude", "plugins", "cache", "context-mode", "context-mode", version), version }] } });
+}
+
+test("[US] claude-code: a plugin copy older than the installed package is a doctor FAIL naming both versions; setup runs claude plugin update", { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+  const s = sandbox(t);
+  const log = path.join(s.root, "claude.log");
+  const state = path.join(s.root, "claude.state");
+  const want = path.join(s.root, "want.json"); // what the host writes on install/update: the package version it copied
+  const ip = path.join(s.home, ".claude", "plugins", "installed_plugins.json");
+  fakeClaude(s.root, s.bin, `echo "$@" >> "${log}"
+case "$1 $2" in
+  "plugin list") if [ -f "${state}" ]; then echo "context-mode@context-mode"; fi ;;
+  "plugin install"|"plugin update") touch "${state}"; mkdir -p "${path.dirname(ip)}"; cp "${want}" "${ip}" ;;
+esac
+exit 0`);
+  const opts = { home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["claude-code"] };
+  writeFileSync(want, installedPlugins(s.home, "2.0.0"));
+  const first = await runSetup({ ...opts, runId: "r1" });
+  assert.equal(first.agents[0].status, "PASS", JSON.stringify(first.agents[0], null, 2));
+  assert.equal((await runDoctor(opts)).agents[0].status, "PASS");
+  // npm i -g context-mode@<newer>: the package moves on, the host copy does not.
+  writeFileSync(path.join(s.pkgDir, "package.json"), JSON.stringify({ name: "context-mode", version: "2.0.1" }));
+  const stale = await runDoctor(opts);
+  assert.equal(stale.agents[0].status, "FAIL");
+  assert.equal(stale.agents[0].reason, "copy: Claude Code runs context-mode 2.0.0, the installed package is 2.0.1; run claude plugin update context-mode@context-mode");
+  writeFileSync(want, installedPlugins(s.home, "2.0.1"));
+  writeFileSync(log, "");
+  const fixed = await runSetup({ ...opts, runId: "r2" });
+  assert.equal(fixed.agents[0].status, "PASS", JSON.stringify(fixed.agents[0], null, 2));
+  assert.ok(readFileSync(log, "utf8").includes("plugin update context-mode@context-mode"), readFileSync(log, "utf8"));
+  assert.equal(readFileSync(log, "utf8").includes("plugin install"), false, "a listed plugin is updated, not installed again");
+  assert.ok(fixed.agents[0].checks.find((c) => c.name === "copy").ok);
+  assert.equal((await runDoctor(opts)).agents[0].status, "PASS");
+  // A refresh is not an install: undo must not uninstall the plugin.
+  const manifest = JSON.parse(readFileSync(path.join(s.home, ".context-mode", "backups", "r2", "manifest.json"), "utf8"));
+  assert.equal(manifest.entries.some((e) => e.undo), false, JSON.stringify(manifest));
+});
+
+test("[US] claude-code: setup that cannot refresh a stale copy is a FAIL that names the copy check", { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+  const s = sandbox(t);
+  const ip = put(path.join(s.home, ".claude", "plugins", "installed_plugins.json"), installedPlugins(s.home, "1.9.0"));
+  fakeClaude(s.root, s.bin, `case "$1 $2" in
+  "plugin list") echo "context-mode@context-mode" ;;
+esac
+exit 0`);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["claude-code"], runId: "r" });
+  assert.equal(res.agents[0].status, "FAIL");
+  assert.match(res.agents[0].reason, /^copy: Claude Code runs context-mode 1\.9\.0, the installed package is 2\.0\.0/);
+  assert.equal(JSON.parse(readFileSync(ip, "utf8")).plugins["context-mode@context-mode"][0].version, "1.9.0");
+});

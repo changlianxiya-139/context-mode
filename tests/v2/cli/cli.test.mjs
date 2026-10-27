@@ -320,6 +320,18 @@ test("[M7] cli/upgrade: npm i -g context-mode@<tag>, then the new package runs s
   assert.match(readFileSync(f, "utf8"), new RegExp(path.join(root, "context-mode", "server.mjs").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("[US] cli/upgrade-tag: with no --tag, upgrade stays on the dist-tag of the running version (D-US-1)", (t) => {
+  const s = sandbox(t);
+  writeFileSync(path.join(s.pkg, "package.json"), JSON.stringify({ name: "context-mode", version: "2.0.0-next.900", type: "module" }));
+  const next = run(s, ["upgrade", "--dry-run"]);
+  assert.equal(next.status, 0, next.stderr);
+  assert.match(next.stdout, /^npm i -g context-mode@next$/m);
+  const pinned = run(s, ["upgrade", "--dry-run", "--tag", "latest"]);
+  assert.match(pinned.stdout, /^npm i -g context-mode@latest$/m, "--tag wins");
+  writeFileSync(path.join(s.pkg, "package.json"), JSON.stringify({ name: "context-mode", version: "2.0.1", type: "module" }));
+  assert.match(run(s, ["upgrade", "--dry-run"]).stdout, /^npm i -g context-mode@latest$/m);
+});
+
 test("[M7] cli/upgrade-fail: npm failing is exit 1 with the command to retry", (t) => {
   const s = sandbox(t);
   fakeBin(s, "npm", `echo "E404" >&2\nexit 1`);

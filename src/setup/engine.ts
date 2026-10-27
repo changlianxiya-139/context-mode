@@ -50,7 +50,7 @@ export interface SetupOptions extends SetupContext {
   onAgent?: (id: AgentId, phase: "start" | "done", res?: AgentResult) => void;
 }
 
-interface Entry { agent: AgentId; file?: string; existed?: boolean; backup?: string; undo?: { bin: string; args: string[] }; }
+interface Entry { agent: AgentId; file?: string; existed?: boolean; backup?: string; undo?: { bin: string; args: string[] }; ran?: { bin: string; args: string[] }; }
 interface Manifest { runId: string; path: string; entries: Entry[]; }
 
 // ---------- small helpers ----------
@@ -131,7 +131,7 @@ function parseFail(_row: CheckRow, file: string): string { return `${file} does 
 // ---------- plan ----------
 
 interface FileEdit { file: string; before: string | undefined; after: string; changes: Change[]; }
-interface Plan { edits: FileEdit[]; cli: string[][]; }
+interface Plan { edits: FileEdit[]; cli: string[][]; refresh: string[][]; }
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -242,7 +242,7 @@ function planSkills(row: CheckRow, edits: FileEdit[]): void {
   }
 }
 
-function planRow(row: CheckRow, listed: boolean): Plan {
+function planRow(row: CheckRow, listed: boolean, stale: boolean): Plan {
   const edits: FileEdit[] = [];
   if (row.config) {
     const c = row.config;
@@ -256,7 +256,9 @@ function planRow(row: CheckRow, listed: boolean): Plan {
   planHookInstall(row, edits);
   planSkills(row, edits);
   const cli = row.config || !row.cli || listed ? [] : row.cli.install;
-  return { edits, cli };
+  // D-US-1: a listed plugin whose copy is older than the package gets the host's own update command, not a reinstall.
+  const refresh = listed && stale && row.copy ? [row.copy.refresh] : [];
+  return { edits, cli, refresh };
 }
 
 // ---------- verify ----------
@@ -268,6 +270,32 @@ function listCheck(row: CheckRow, env: SetupContext["env"]): Check | undefined {
   // Gemini 0.65.0 writes the list to stderr (D-INST-2), so both streams count.
   const ok = r.status === 0 && `${r.stdout}${r.stderr}`.includes("context-mode");
   return { name: "list", ok, detail: ok ? undefined : `${l.bin} ${l.args.join(" ")} does not list context-mode` };
+}
+
+function packageVersion(pkgDir: string): string | undefined {
+  try {
+    const v: unknown = JSON.parse(readFileSync(path.join(pkgDir, "package.json"), "utf8")).version;
+    return typeof v === "string" ? v : undefined;
+  } catch { return undefined; }
+}
+
+/** D-US-1: a host that runs a copy of the package must run the installed version. No record, no check: list covers it. */
+function copyCheck(row: CheckRow, pkgDir: string): Check | undefined {
+  const c = row.copy;
+  const pkg = packageVersion(pkgDir);
+  const text = c ? readOr(c.file) : undefined;
+  if (!c || pkg === undefined || text === undefined) return undefined;
+  let entries: unknown;
+  try {
+    const doc: unknown = JSON.parse(text);
+    entries = isObj(doc) && isObj(doc.plugins) ? doc.plugins[c.plugin] : undefined;
+  } catch { return { name: "copy", ok: false, detail: `${c.file} is not valid JSON; run ${c.bin} ${c.refresh.join(" ")}` }; }
+  if (!Array.isArray(entries)) return undefined;
+  const versions = entries.filter(isObj).map((e) => e.version).filter((v): v is string => typeof v === "string");
+  if (!versions.length) return undefined;
+  const old = versions.find((v) => v !== pkg);
+  if (old === undefined) return { name: "copy", ok: true };
+  return { name: "copy", ok: false, detail: `${c.host} runs context-mode ${old}, the installed package is ${pkg}; run ${c.bin} ${c.refresh.join(" ")}` };
 }
 
 function mcpCheck(cmd: string[], env: SetupContext["env"]): Promise<Check> {
@@ -431,6 +459,8 @@ async function verifyRow(row: CheckRow, ctx: SetupContext): Promise<Check[]> {
   const checks: Check[] = [parseCheck(row)];
   const l = listCheck(row, env);
   if (l) checks.push(l);
+  const cp = copyCheck(row, ctx.pkgDir);
+  if (cp) checks.push(cp);
   checks.push(await mcpCheck(row.serverCommand, env));
   if (row.hookCommand) checks.push(hookCheck(row, env));
   checks.push(hookRegisteredCheck(row, env, l), hookRunsCheck(row, env), hookSeenCheck(row, ctx.home), skillsCheck(row, ctx.pkgDir));
@@ -551,12 +581,12 @@ async function setupRow(row: CheckRow, ctx: SetupContext, run: Run, dryRun: bool
   let plan: Plan;
   try {
     const listed = needsBin ? listCheck(row, ctx.env)?.ok === true : false;
-    plan = planRow(row, listed);
+    plan = planRow(row, listed, copyCheck(row, ctx.pkgDir)?.ok === false);
   } catch (e) { return { ...res, status: "FAIL", reason: (e as Error).message }; }
   // The config entry is current when the plan changes nothing in that file but codex trust entries.
   const configEdited = (file: string): boolean => plan.edits.some((e) => e.file === file && e.changes.some((c) => !isTrust(row, c)));
   res.v1 = detectV1(row.id, ctx.home).filter((f) => !(row.config && f.file === row.config.file && !configEdited(f.file)));
-  res.changes = [...plan.edits.flatMap((e) => e.changes), ...plan.cli.map((args) => ({ command: [row.cli!.bin, ...args] }))];
+  res.changes = [...plan.edits.flatMap((e) => e.changes), ...[...plan.cli, ...plan.refresh].map((args) => ({ command: [row.cli!.bin, ...args] }))];
   if (dryRun) return res;
   try {
     for (const e of plan.edits) {
@@ -569,6 +599,11 @@ async function setupRow(row: CheckRow, ctx: SetupContext, run: Run, dryRun: bool
       if (r.status !== 0) throw new Error(`${row.cli!.bin} ${args.join(" ")} exited ${r.status}: ${`${r.stderr}`.trim()}`);
     }
     if (plan.cli.length) for (const args of row.cli!.remove) run.record({ agent: row.id, undo: { bin: row.cli!.bin, args } });
+    for (const args of plan.refresh) { // a refresh is not an install: recorded, never undone
+      const r = runBin(row.cli!.bin, args, ctx.env);
+      if (r.status !== 0) throw new Error(`${row.cli!.bin} ${args.join(" ")} exited ${r.status}: ${`${r.stderr}`.trim()}`);
+      run.record({ agent: row.id, ran: { bin: row.cli!.bin, args } });
+    }
     res.checks = await verifyRow(row, ctx);
     const bad = res.checks.filter((c) => !c.ok);
     if (bad.length) throw new Error(bad.map((c) => `${c.name}: ${c.detail}`).join("; "));
@@ -614,7 +649,12 @@ export async function runDoctor(opts: SetupOptions): Promise<SetupResult> {
 }
 
 /** D-HA-CODEX-TRUST-1: the only planned change is a trust entry, so the hooks are there and hook-registered names it. */
-function onlyTrust(row: CheckRow, changes: Change[]): boolean { return changes.every((c) => isTrust(row, c)); }
+function onlyTrust(row: CheckRow, changes: Change[]): boolean { return changes.every((c) => isTrust(row, c) || isRefresh(row, c)); }
+/** D-US-1: a pending copy refresh is not "not set up": doctor runs verify, whose copy check names the stale version. */
+function isRefresh(row: CheckRow, c: Change): boolean {
+  const r = row.copy;
+  return r !== undefined && c.command !== undefined && c.command.join(" ") === [r.bin, ...r.refresh].join(" ");
+}
 function isTrust(row: CheckRow, c: Change): boolean {
   const h = row.hookInstall;
   return h.kind === "file" && h.trust !== undefined && c.file === h.trust && typeof c.path === "string" && c.path.startsWith(CODEX_TRUST_PATH);
