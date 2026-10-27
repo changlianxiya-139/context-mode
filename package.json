@@ -32,6 +32,10 @@
       "./pi/skills"
     ]
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mksglu/context-mode.git"
+  },
   "type": "module",
-  "version": "2.0.0-next.4"
+  "version": "2.0.0-next.5"
 }
