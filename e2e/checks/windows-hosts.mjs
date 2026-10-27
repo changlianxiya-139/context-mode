@@ -17,7 +17,6 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readd
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnForm } from "../../src/setup/spawn-bin.ts"; // one spawn form for setup, smoke and this matrix (D-WIN-CMDBANG-1)
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WIN = process.platform === "win32";
@@ -66,8 +65,18 @@ const tail = (s, n = 500) => `${s ?? ""}`.trim().slice(-n);
 
 // ---------- process helpers ----------
 
+// GS4: e2e never imports src/, so this mirrors src/setup/spawn-bin.ts spawnForm: /d /v:off /s /c (D-WIN-CMDBANG-1).
+const CMD_QUOTE_CHARS = '"&|<>^()%!';
+const q = (a) => (a === "" || [...a].some((c) => c.trim() === "" || CMD_QUOTE_CHARS.includes(c)) ? `"${a.split('"').join('""')}"` : a);
+function form(file, args) {
+  const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
+  if (WIN && (ext === ".cmd" || ext === ".bat")) {
+    return { command: process.env.ComSpec || "cmd.exe", args: ["/d", "/v:off", "/s", "/c", `"${[file, ...args].map(q).join(" ")}"`], windowsVerbatimArguments: true };
+  }
+  return { command: file, args, windowsVerbatimArguments: false };
+}
 function run(file, args, { env, cwd, input, timeout = STEP_TIMEOUT_MS } = {}) {
-  const f = spawnForm(file, args, env ?? process.env);
+  const f = form(file, args);
   const r = spawnSync(f.command, f.args, { env, cwd, input, encoding: "utf8", timeout, windowsHide: true, windowsVerbatimArguments: f.windowsVerbatimArguments, maxBuffer: 64 * 1024 * 1024 });
   return { status: r.status, signal: r.signal, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message };
 }
