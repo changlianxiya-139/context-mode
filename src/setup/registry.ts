@@ -54,6 +54,17 @@ export const SKILLS_DIR = "skills";
 export const SKILL_FILE = "SKILL.md";
 const OPENCODE_PLUGIN = ["opencode", "plugin.js"];
 const CODEX_CONFIG_FILE = "config.toml";
+const CODEX_HOME_ENV = "CODEX_HOME";
+const CODEX_DIR = ".codex";
+
+/** D-N5-CODEX-HOME-1: a path under HOME as the agent reads it. Codex reads config.toml, hooks.json and skills/
+ *  from $CODEX_HOME (default ~/.codex), so a ".codex/..." path moves under CODEX_HOME when it is set. */
+function agentPath(ctx: SetupContext, id: AgentId, rel: string | readonly string[]): string {
+  const segs = typeof rel === "string" ? rel.split("/") : [...rel];
+  const codexHome = ctx.env[CODEX_HOME_ENV];
+  if (id === "codex" && segs[0] === CODEX_DIR && codexHome !== undefined && codexHome !== "") return path.join(codexHome, ...segs.slice(1));
+  return path.join(ctx.home, ...segs);
+}
 
 /** The skill text with every ctx tool name given the agent's tool name prefix (plain split/join, no regex).
  *  A skill dir shared by several agents names each agent's tool, joined by " or " (D-HQ-COPILOT-NAMES-2). */
@@ -126,7 +137,7 @@ function configFor(ctx: SetupContext, id: AgentId): ConfigTarget | undefined {
   const [node, server, flag, agent] = serverCmd(ctx, id);
   const own = OWN_MCP_ENTRY[id];
   if (own) {
-    const file = path.join(ctx.home, ...own.file);
+    const file = agentPath(ctx, id, own.file);
     const format: HostConfigFormat = file.endsWith(".toml") ? "toml" : id === "vscode" ? "jsonc" : "json";
     // D-HF-VSCODE-PROJECT-1: VS Code expands ${workspaceFolder} in MCP server args (VS Code MCP configuration
     // reference, predefined variables); the server reads the project from --workspace-folder (D-M1-5).
@@ -177,9 +188,10 @@ const LIST: Partial<Record<AgentId, { bin: string; args: string[] }>> = {
   opencode: { bin: "opencode", args: ["mcp", "list", "--pure"] },
 };
 
-function hookFilesFor(home: string, id: AgentId): HookFile[] {
+function hookFilesFor(ctx: SetupContext, id: AgentId): HookFile[] {
+  const home = ctx.home;
   switch (id) {
-    case "codex": return [{ file: path.join(home, ".codex", "hooks.json"), mode: "rewrite" }];
+    case "codex": return [{ file: agentPath(ctx, id, [CODEX_DIR, "hooks.json"]), mode: "rewrite" }];
     case "copilot-cli": return [{ file: path.join(home, ".copilot", "hooks", "context-mode.json"), mode: "rewrite" }];
     case "claude-code": return [{ file: path.join(home, ".claude", "settings.json"), mode: "drop" }];
     case "gemini": return [{ file: path.join(home, ".gemini", "settings.json"), mode: "drop" }];
@@ -193,7 +205,7 @@ function hookInstallFor(ctx: SetupContext, row: AdapterRow, command: string): Ho
   if (ch.kind === "home-file") {
     const shape = HOOK_SHAPES[row.id];
     if (!shape) throw new Error(`setup: ${row.id} has a home-file hook channel and no hook shape`);
-    const file = path.join(ctx.home, ch.path);
+    const file = agentPath(ctx, row.id, ch.path);
     // Codex 0.164.0 runs a hooks.json hook only once config.toml trusts it (D-HA-CODEX-TRUST-1).
     if (row.id === "codex") return { kind: "file", file, shape: shape(row, command), command, trust: path.join(path.dirname(file), CODEX_CONFIG_FILE) };
     return { kind: "file", file, shape: shape(row, command), command };
@@ -216,7 +228,7 @@ function bareSkillDir(): string {
 function skillInstallFor(ctx: SetupContext, row: AdapterRow): SkillInstall {
   const ch = row.skillChannel;
   if (ch.kind === "package") return { kind: "package", via: ch.path };
-  const dir = path.join(ctx.home, ch.path);
+  const dir = agentPath(ctx, row.id, ch.path);
   const src = path.join(ctx.pkgDir, bareSkillDir());
   return { kind: "dir", dir, prefixes: skillDirPrefixes(ch.path), files: COMMAND_SKILLS.map((name) => ({
     name, src: path.join(src, name, SKILL_FILE), file: path.join(dir, name, SKILL_FILE) })) };
@@ -226,7 +238,7 @@ export function buildRegistry(ctx: SetupContext): CheckRow[] {
   return ADAPTERS.map((row): CheckRow => {
     const id = row.id;
     const config = configFor(ctx, id);
-    const hookFiles = hookFilesFor(ctx.home, id);
+    const hookFiles = hookFilesFor(ctx, id);
     const hookCommand = [process.execPath, path.join(ctx.pkgDir, HOOK_BUNDLE), AGENT_FLAG, id];
     const command = `"${hookCommand[0]}" "${hookCommand[1]}" ${AGENT_FLAG} ${id}`;
     const hookInstall = hookInstallFor(ctx, getAdapter(id), command);

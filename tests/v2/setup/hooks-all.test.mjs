@@ -264,3 +264,19 @@ test("D-HQ-COPILOT-NAMES-2: copilot-cli and vscode share ~/.copilot/skills; each
   const d = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["copilot-cli", "vscode"] });
   for (const a of d.agents) assert.equal(a.checks.find((c) => c.name === "skills")?.ok, true, a.id + " skills " + JSON.stringify(a.checks.find((c) => c.name === "skills")));
 });
+
+// N5 (2.0.0-next.5 live run): with CODEX_HOME set apart from HOME/.codex, setup wrote HOME/.codex/config.toml while
+// `codex mcp list` reads CODEX_HOME/config.toml, so setup failed and rolled back. Codex reads its config, hooks.json
+// and skills from CODEX_HOME (default ~/.codex), so setup writes all three there.
+test("[D-N5-CODEX-HOME-1] setup writes codex config.toml, hooks.json and skills under CODEX_HOME when it is set", async (t) => {
+  const s = sandbox(t);
+  const codexHome = path.join(s.root, "codex-home");
+  const env = { ...s.env, CODEX_HOME: codexHome };
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env, agents: ["codex"], runId: "ch" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  assert.ok(readFileSync(path.join(codexHome, "config.toml"), "utf8").includes("[mcp_servers.context-mode]"), "MCP entry in CODEX_HOME/config.toml");
+  const cmds = commands(JSON.parse(readFileSync(path.join(codexHome, "hooks.json"), "utf8")));
+  assert.ok(cmds.includes(hookCmd(s.pkgDir, "codex")), "hook command in CODEX_HOME/hooks.json");
+  for (const name of SKILLS) assert.ok(existsSync(path.join(codexHome, "skills", name, "SKILL.md")), name + " under CODEX_HOME/skills");
+  assert.equal(existsSync(path.join(s.home, ".codex")), false, "nothing written to HOME/.codex");
+});
