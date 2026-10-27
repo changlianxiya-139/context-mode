@@ -103,3 +103,5 @@ Fix: D-RN-ORDER-1. The GitHub release is now the last job of `release.yml`, afte
 | # | Item | Status | Next step |
 |---|---|---|---|
 | N5-1 | The GitHub prerelease v2.0.0-next.4 exists, but npm has no 2.0.0-next.4 (run 40496186557: publish-npm failed with E422, D-RN-REPO-1). It was made before D-RN-ORDER-1. | open, left as is on purpose | Owner decides: delete the GitHub prerelease v2.0.0-next.4, or add a note to it that points to the next version on npm. |
+
+- Q-WIN-5 (qwen hook on Windows cmd.exe): the quoted hook path `node "${CLAUDE_PLUGIN_ROOT}/hook.mjs"` is broken under qwen's `cmd.exe /d /s /c` spawn (Node re-quotes, node.exe sees literal quotes). Qwen replaces only `${CLAUDE_PLUGIN_ROOT}`. Choices: (a) setup writes a platform-specific qwen hook file at install time (no inner quotes on win32, a short junction or 8.3 path for spaced homes); (b) a PATH launcher bin so the command has no path; (c) report upstream to qwen to spawn with windowsVerbatimArguments. Decide, then drop `todo` in tests/v2/build/qwen-hook-shell.test.mjs. See D-WIN-QWEN-SHELL-1.
