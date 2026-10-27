@@ -38,6 +38,7 @@ To do the setup step by hand, run `context-mode setup --print gemini` and follow
 - The extension brings the MCP server, the hooks (`hooks/hooks.json`: BeforeAgent, BeforeTool, AfterTool, PreCompress) and the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade`.
 - Removes old context-mode hook commands from `~/.gemini/settings.json`.
 - Effect: the call runs, then a large result is replaced by a short selection that names `ctx_search` (replace). Gemini AfterTool `decision: deny` carries the selection (D-HA-GEMINI-REPLACE-1).
+- A shell read of one large file (`cat big.log`) does not run: BeforeTool `decision: deny` names `mcp_context-mode_ctx_execute` instead (D-HA-GEMINI-DUMP-1). The replace hint adds the prompt words the output holds, so its `ctx_search` call returns the line you asked for (D-HA-GEMINI-HINT-1).
 - Backs up each file first. A failed step is rolled back byte for byte.
 - Never edits `CLAUDE.md`, `AGENTS.md` or other instruction files.
 
