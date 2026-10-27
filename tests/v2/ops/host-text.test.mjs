@@ -11,6 +11,10 @@ import { parseHostConfig, readHostConfig, writeHostConfigEdit } from "../../../s
 import { detectV1 } from "../../../src/core/ops/detect-v1.ts";
 import { removeV1 } from "../../../src/core/ops/v1-remove.ts";
 import { readUserDeny } from "../../../src/core/policy/user-deny.ts";
+import { runUninstall } from "../../../src/core/ops/uninstall.ts";
+import { checkHostConfig } from "../../../src/core/ops/doctor-config.ts";
+import { getAdapter } from "../../../src/adapters/table.ts";
+import { PI_GIT_PACKAGE } from "../../../src/core/contracts/constants.ts";
 
 const BOM = "﻿";
 function tmp(t) {
@@ -120,4 +124,40 @@ test("host-text: the dominant line end wins; a mostly-LF file with one CRLF line
   writeHostConfigEdit(file, readHostConfig("opencode", file), { plugin: ["a"] });
   const out = readFileSync(file, "utf8");
   assert.equal(out.includes("\r"), false, "no CRLF forced onto an LF file");
+});
+
+// PI-WIN-2: pi settings.json written by PowerShell 5 or Notepad has a BOM and CRLF. Doctor, ctx_upgrade and uninstall
+// read it through readHostConfig. Runs on every OS (the bytes are built in the test).
+function piSettings(t, packages) {
+  const home = tmp(t);
+  const file = path.join(home, ".pi", "agent", "settings.json");
+  mkdirSync(path.dirname(file), { recursive: true });
+  const raw = BOM + JSON.stringify({ theme: "dark", packages }, null, 2).split("\n").join("\r\n") + "\r\n";
+  writeFileSync(file, raw, "utf8");
+  return { home, file, raw };
+}
+
+test("host-text: readHostConfig reads a BOM + CRLF pi settings.json (PI-WIN-2)", (t) => {
+  const { file } = piSettings(t, ["npm:other", PI_GIT_PACKAGE]);
+  const cur = readHostConfig("pi", file);
+  assert.equal(cur.text.charCodeAt(0), 0x7b, "BOM off");
+  assert.equal(cur.text.includes("\r"), false, "CRLF off");
+  assert.deepEqual(parseHostConfig("pi", cur.path, cur.text, cur.format).packages, ["npm:other", PI_GIT_PACKAGE]);
+});
+
+test("host-text: doctor D3 passes on a BOM + CRLF pi settings.json, no CONFIG_PARSE_FAILED (PI-WIN-2)", (t) => {
+  const { home } = piSettings(t, [PI_GIT_PACKAGE]);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, USERPROFILE: home }, home);
+  assert.equal(d3.status, "PASS", d3.detail);
+});
+
+test("host-text: uninstall drops the own pi package from a BOM + CRLF settings.json and keeps BOM, CRLF and user keys (PI-WIN-2)", (t) => {
+  const { home, file } = piSettings(t, ["npm:other", PI_GIT_PACKAGE]);
+  runUninstall({ adapter: { id: "pi", installMode: "in-process" }, project: { projectKey: "abcdef0123456789" }, env: { HOME: home, USERPROFILE: home }, confirmDelete: false });
+  const out = readFileSync(file, "utf8");
+  assert.equal(out.charCodeAt(0), 0xfeff, "BOM kept");
+  assert.equal(out.split("\r\n").join("").includes("\n"), false, "every line end is CRLF");
+  const doc = JSON.parse(out.slice(1));
+  assert.deepEqual(doc.packages, ["npm:other"]);
+  assert.equal(doc.theme, "dark");
 });
