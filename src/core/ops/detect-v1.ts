@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
 import type { V1Finding } from "../contracts/types.ts";
+import { tomlHeaderText, tomlTableSpans } from "./host-config.ts";
 import { hostText } from "./host-text.ts";
 import {
   AGENT_HOME_DIR, CLAUDE_USER_CONFIG_FILE, CONFIG_JSON_FILE, CONFIG_TOML_FILE, DATA_ROOT, GITHUB_DIR_NAME,
@@ -75,6 +76,15 @@ function readText(file: string): string {
     return hostText(readFileSync(file, "utf8"));
   } catch {
     return "";
+  }
+}
+
+/** The standard tables of a TOML file; none when it is missing or not valid TOML (same reader as setup, D-TOML-PARSER-1). */
+function readTomlTables(file: string): ReturnType<typeof tomlTableSpans> {
+  try {
+    return tomlTableSpans(readText(file));
+  } catch {
+    return [];
   }
 }
 
@@ -168,9 +178,8 @@ function scanCodex(agentHome: string, out: V1Finding[]): void {
     }
   }
   const tomlFile = join(agentHome, CONFIG_TOML_FILE);
-  for (const line of readText(tomlFile).split("\n")) {
-    const header = line.trim();
-    if (header.startsWith(V1_TOML_SECTION_PREFIX)) out.push(finding(tomlFile, header, V1_REASON.codexToml));
+  for (const span of readTomlTables(tomlFile)) { // real tables only: a header-looking line inside a multiline string is not one
+    if (tomlHeaderText(span.path).startsWith(V1_TOML_SECTION_PREFIX)) out.push(finding(tomlFile, span.header.trim(), V1_REASON.codexToml));
   }
   dataDir(join(agentHome, V1_DATA_DIR_NAME), V1_REASON.dataDir, out);
 }

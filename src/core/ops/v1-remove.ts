@@ -11,11 +11,11 @@ import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "n
 import type { AgentId } from "../contracts/agents.ts";
 import type { UpgradeChangeRow, V1Finding } from "../contracts/types.ts";
 import {
-  TOML_EXT, TOML_TABLE_OPEN, UPGRADE_AREA_KEY_SEP, UPGRADE_NOT_FOUND, UPGRADE_REMOVED,
+  TOML_EXT, UPGRADE_AREA_KEY_SEP, UPGRADE_NOT_FOUND, UPGRADE_REMOVED,
   UPGRADE_REPORT_ONLY, UPGRADE_REPORT_ONLY_REASONS, UPGRADE_TRASH_SUFFIX, V1_KEY_PATH_SEP,
 } from "../contracts/constants.ts";
 import { atomicWriteFile, renameWithRetry } from "./atomic-file.ts";
-import { parseHostConfig, writeHostConfigEdit } from "./host-config.ts";
+import { parseHostConfig, tomlTableSpans, writeHostConfigEdit } from "./host-config.ts";
 import { hostLayout, hostText, withLayout } from "./host-text.ts";
 
 type Obj = Record<string, unknown>;
@@ -52,14 +52,16 @@ function keepOriginal(file: string, kept: Set<string>, undo: Undo[]): void {
   undo.push({ trash, target: file });
 }
 
-/** Cut the TOML table whose header line is `header`: from that line to the next line that opens a table. */
+/** Cut the TOML table whose header line is `header`: its real byte span from the TOML parser, so a header-looking
+ *  line inside a multiline string is never taken for it. Null when no such table (or the text is not TOML). */
 function cutTomlTable(text: string, header: string): string | null {
-  const lines = text.split("\n");
-  const start = lines.findIndex((l) => l.trim() === header);
-  if (start === -1) return null;
-  let end = start + 1;
-  while (end < lines.length && !lines[end].trim().startsWith(TOML_TABLE_OPEN)) end += 1;
-  return [...lines.slice(0, start), ...lines.slice(end)].join("\n");
+  let span;
+  try {
+    span = tomlTableSpans(text).find((t) => t.header.trim() === header);
+  } catch {
+    return null;
+  }
+  return span === undefined ? null : text.slice(0, span.start) + text.slice(span.end);
 }
 
 function writeAtomic(file: string, text: string): void {

@@ -4,6 +4,8 @@
 // so comments and untouched text survive byte for byte.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getStaticTOMLValue, parseTOML } from "toml-eslint-parser";
+import type { AST } from "toml-eslint-parser";
 import {
   AGENT_ARG, HOST_CONFIG_TEXT_PATH, HOST_NODE_COMMAND, JSON_INDENT_UNIT, JSONC_EXT,
   MCP_ARGS_FIELD, MCP_COMMAND_FIELD, OPENCODE_CONFIG_FILES, OPENCODE_GIT_SPEC, OPENCODE_PLUGIN_KEY, OWN_MCP_ENTRY,
@@ -167,147 +169,66 @@ function scanJson(text: string, format: HostConfigFormat): JsonDoc {
 }
 
 // ------------------------------------------------------------------------------------------- TOML scan
+// D-TOML-PARSER-1: toml-eslint-parser (bundled by esbuild, no regex) reads and validates every TOML file.
+// The scan keeps the byte range of each standard table and of each key line, so an edit touches only the
+// span it owns and every other byte of the user's file stays.
 
-interface TomlTable { path: string[]; start: number; end: number; }
-interface TomlDoc { value: Record<string, unknown>; tables: TomlTable[]; }
+interface TomlSpan { path: string[]; header: string; start: number; end: number; }
+interface TomlKey { base: string[]; full: string[]; start: number; end: number; inline: boolean; }
+interface TomlDoc { value: Record<string, unknown>; tables: TomlSpan[]; keys: TomlKey[]; }
 
-function tomlKeyPath(s: string): string[] {
-  const out: string[] = [];
-  let i = 0;
-  for (;;) {
-    while (s[i] === " " || s[i] === "\t") i += 1;
-    let seg = "";
-    if (s[i] === '"' || s[i] === "'") {
-      const q = s[i];
-      let j = i + 1;
-      while (j < s.length && s[j] !== q) j += q === '"' && s[j] === "\\" ? 2 : 1;
-      if (j >= s.length) throw new SyntaxError("key");
-      seg = q === '"' ? (JSON.parse(s.slice(i, j + 1)) as string) : s.slice(i + 1, j);
-      i = j + 1;
-    } else {
-      while (i < s.length && !" \t.".includes(s[i])) { seg += s[i]; i += 1; }
-      if (seg === "") throw new SyntaxError("key");
-    }
-    out.push(seg);
-    while (s[i] === " " || s[i] === "\t") i += 1;
-    if (i >= s.length) return out;
-    if (s[i] !== ".") throw new SyntaxError("key");
-    i += 1;
-  }
+function keyNames(key: AST.TOMLKey): string[] {
+  return key.keys.map((k) => (k.type === "TOMLBare" ? k.name : k.value));
 }
 
-class TomlValue {
-  i = 0;
-  readonly s: string;
-  constructor(s: string) { this.s = s; }
-  ws(): void {
-    for (;;) {
-      while (this.i < this.s.length && " \t\r\n".includes(this.s[this.i])) this.i += 1;
-      if (this.s[this.i] !== "#") return;
-      while (this.i < this.s.length && this.s[this.i] !== "\n") this.i += 1;
-    }
-  }
-  read(): unknown {
-    this.ws();
-    const c = this.s[this.i];
-    if (c === '"' || c === "'") {
-      let j = this.i + 1;
-      while (j < this.s.length && this.s[j] !== c && this.s[j] !== "\n") j += c === '"' && this.s[j] === "\\" ? 2 : 1;
-      if (this.s[j] !== c) throw new SyntaxError("string");
-      const raw = this.s.slice(this.i, j + 1);
-      this.i = j + 1;
-      return c === '"' ? JSON.parse(raw) : raw.slice(1, -1);
-    }
-    if (c === "[") {
-      this.i += 1;
-      const out: unknown[] = [];
-      for (;;) {
-        this.ws();
-        if (this.s[this.i] === "]") { this.i += 1; return out; }
-        out.push(this.read());
-        this.ws();
-        if (this.s[this.i] === ",") { this.i += 1; continue; }
-        if (this.s[this.i] !== "]") throw new SyntaxError("array");
-      }
-    }
-    if (c === "{") {
-      this.i += 1;
-      const out: Record<string, unknown> = {};
-      for (;;) {
-        this.ws();
-        if (this.s[this.i] === "}") { this.i += 1; return out; }
-        const eq = this.s.indexOf("=", this.i);
-        if (eq < 0) throw new SyntaxError("inline table");
-        const key = tomlKeyPath(this.s.slice(this.i, eq));
-        this.i = eq + 1;
-        setPath(out, key, this.read());
-        this.ws();
-        if (this.s[this.i] === ",") { this.i += 1; continue; }
-        if (this.s[this.i] !== "}") throw new SyntaxError("inline table");
-      }
-    }
-    let j = this.i;
-    while (j < this.s.length && !" \t\r\n,]}#".includes(this.s[j])) j += 1;
-    const word = this.s.slice(this.i, j);
-    this.i = j;
-    if (word === "true") return true;
-    if (word === "false") return false;
-    const n = Number(word.split("_").join(""));
-    if (word === "" || Number.isNaN(n)) throw new SyntaxError("value");
-    return n;
-  }
+function lineStartOf(text: string, at: number): number {
+  return at === 0 ? 0 : text.lastIndexOf("\n", at - 1) + 1;
 }
 
-function setPath(target: Record<string, unknown>, path: KeyPath, value: unknown): void {
-  let cur = target;
-  for (let k = 0; k < path.length - 1; k += 1) {
-    const next = cur[path[k]];
-    if (next === undefined) cur[path[k]] = {};
-    else if (!isPlainObject(next)) throw new SyntaxError("key conflict");
-    cur = cur[path[k]] as Record<string, unknown>;
-  }
-  if (cur[path[path.length - 1]] !== undefined) throw new SyntaxError("duplicate key");
-  cur[path[path.length - 1]] = value;
+function lineEndOf(text: string, at: number): number {
+  const nl = text.indexOf("\n", at);
+  return nl < 0 ? text.length : nl + 1;
+}
+
+function tomlValue(text: string): Record<string, unknown> {
+  return getStaticTOMLValue(parseTOML(text)) as Record<string, unknown>;
 }
 
 function scanToml(text: string): TomlDoc {
-  const value: Record<string, unknown> = {};
-  const tables: TomlTable[] = [];
-  let table: Record<string, unknown> = value;
-  let i = 0;
-  while (i < text.length) {
-    const lineEnd = text.indexOf("\n", i) < 0 ? text.length : text.indexOf("\n", i) + 1;
-    const line = text.slice(i, lineEnd).trim();
-    if (line === "" || line.startsWith("#")) { i = lineEnd; continue; }
-    if (line.startsWith("[")) {
-      if (line.startsWith("[[")) throw new SyntaxError("array of tables");
-      const close = line.indexOf("]");
-      if (close < 0) throw new SyntaxError("header");
-      const path = tomlKeyPath(line.slice(1, close));
-      if (tables.length > 0) tables[tables.length - 1].end = i;
-      tables.push({ path, start: i, end: text.length });
-      let cur = value;
-      for (const seg of path) {
-        if (cur[seg] === undefined) cur[seg] = {};
-        if (!isPlainObject(cur[seg])) throw new SyntaxError("table conflict");
-        cur = cur[seg] as Record<string, unknown>;
-      }
-      table = cur;
-      i = lineEnd;
-      continue;
-    }
-    const eq = text.indexOf("=", i);
-    if (eq < 0 || eq >= lineEnd) throw new SyntaxError("key/value");
-    const key = tomlKeyPath(text.slice(i, eq));
-    const reader = new TomlValue(text);
-    reader.i = eq + 1;
-    setPath(table, key, reader.read());
-    while (reader.i < text.length && (text[reader.i] === " " || text[reader.i] === "\t")) reader.i += 1;
-    if (text[reader.i] === "#") while (reader.i < text.length && text[reader.i] !== "\n") reader.i += 1;
-    if (reader.i < text.length && text[reader.i] !== "\n" && text[reader.i] !== "\r") throw new SyntaxError("trailing text");
-    i = text.indexOf("\n", reader.i) < 0 ? text.length : text.indexOf("\n", reader.i) + 1;
+  const program = parseTOML(text);
+  const tables: TomlSpan[] = [];
+  const keys: TomlKey[] = [];
+  const addKey = (base: string[], kv: AST.TOMLKeyValue): void => {
+    keys.push({ base, full: [...base, ...keyNames(kv.key)], start: kv.range[0], end: kv.range[1], inline: kv.value.type === "TOMLInlineTable" });
+  };
+  for (const node of program.body[0].body) {
+    if (node.type === "TOMLKeyValue") { addKey([], node); continue; }
+    if (!node.resolvedKey.every((seg) => typeof seg === "string")) continue; // inside an array of tables: not ours to edit
+    const path = node.resolvedKey as string[];
+    for (const kv of node.body) addKey(path, kv);
+    if (node.kind !== "standard") continue;
+    const start = lineStartOf(text, node.range[0]);
+    const headEnd = lineEndOf(text, node.key.range[1]);
+    const last = node.body[node.body.length - 1];
+    tables.push({
+      path,
+      header: text.slice(start, text[headEnd - 1] === "\n" ? headEnd - 1 : headEnd),
+      start,
+      end: last === undefined ? headEnd : lineEndOf(text, last.range[1]),
+    });
   }
-  return { value, tables };
+  return { value: getStaticTOMLValue(program) as Record<string, unknown>, tables, keys };
+}
+
+/** Each standard `[table]` of a TOML text with its key path, header line and byte span (header line through the
+ *  line of its last key; comments and blank lines after it belong to what follows). Throws SyntaxError on bad TOML. */
+export function tomlTableSpans(text: string): TomlSpan[] {
+  return scanToml(text).tables;
+}
+
+/** The canonical header text of a table path: `[mcp_servers.context-mode]`. */
+export function tomlHeaderText(path: readonly string[]): string {
+  return "[" + path.map(tomlHeaderKey).join(".") + "]";
 }
 
 // ------------------------------------------------------------------------------------------ parse API
@@ -404,12 +325,14 @@ function setJsonText(text: string, format: HostConfigFormat, path: KeyPath, valu
 
 function tomlScalar(v: unknown): string {
   if (Array.isArray(v)) return "[" + v.map(tomlScalar).join(", ") + "]";
+  if (isPlainObject(v)) return "{ " + Object.entries(v).map(([k, x]) => tomlHeaderKey(k) + " = " + tomlScalar(x)).join(", ") + " }";
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   throw new SyntaxError("unsupported TOML value");
 }
 
 function tomlHeaderKey(seg: string): string {
+  if (seg === "") return '""';
   for (const ch of seg) {
     const bare = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_" || ch === "-";
     if (!bare) return JSON.stringify(seg);
@@ -427,29 +350,78 @@ function tomlBlock(path: KeyPath, value: Record<string, unknown>): string {
   return [out, ...subs].join("\n");
 }
 
-// TOML edits are table-level: the [path] table and its sub-tables are replaced as one block, or appended.
+function under(path: KeyPath, prefix: KeyPath): boolean {
+  return path.length >= prefix.length && prefix.every((seg, k) => path[k] === seg);
+}
+
+// The line (with its newline) a key sits alone on, so deleting a key does not leave a blank line behind.
+function keyLineRange(text: string, k: { start: number; end: number }): [number, number] {
+  const ls = lineStartOf(text, k.start);
+  const le = lineEndOf(text, k.end);
+  const rest = text.slice(k.end, le).trim();
+  const alone = text.slice(ls, k.start).trim() === "" && (rest === "" || rest.startsWith("#"));
+  return alone ? [ls, le] : [k.start, k.end];
+}
+
+function withValueAt(root: unknown, rel: KeyPath, value: unknown): unknown {
+  if (rel.length === 0) return value;
+  const base = isPlainObject(root) ? { ...root } : {};
+  const next = withValueAt(base[rel[0]], rel.slice(1), value);
+  if (next === undefined) delete base[rel[0]];
+  else base[rel[0]] = next;
+  return base;
+}
+
+// Set (or, for undefined, drop) the table at `path`: its tables and key lines are cut, the new table text goes
+// where the first old table stood, or at the end of the file when there was none.
+function replaceToml(text: string, doc: TomlDoc, path: KeyPath, value: Record<string, unknown> | undefined): string {
+  const block = value === undefined ? "" : tomlBlock(path, value);
+  const owned = doc.tables.filter((t) => under(t.path, path));
+  const cuts: [number, number, string][] = doc.keys
+    .filter((k) => under(k.full, path) && !under(k.base, path))
+    .map((k): [number, number, string] => [...keyLineRange(text, k), ""]);
+  owned.forEach((t, n) => cuts.push([t.start, t.end, n === 0 ? block : ""]));
+  cuts.sort((a, b) => b[0] - a[0]);
+  let out = text;
+  for (const [s, e, put] of cuts) out = out.slice(0, s) + put + out.slice(e);
+  if (owned.length > 0 || block === "") return out;
+  const sep = out === "" ? "" : out.endsWith("\n\n") ? "" : out.endsWith("\n") ? "\n" : "\n\n";
+  return out + sep + block;
+}
+
+const tableLike = (v: unknown): boolean => v === undefined || isPlainObject(v);
+
+// TOML edits are table-level: the table at `path` is changed, never the file around it. When only child
+// tables differ, each child is edited alone, so a sibling table (and its comments) keeps its bytes.
 function setTomlText(text: string, path: KeyPath, value: unknown): string {
-  if (!isPlainObject(value)) throw new SyntaxError("TOML edits replace a whole table");
+  if (value !== undefined && !isPlainObject(value)) throw new SyntaxError("TOML edits replace a whole table");
   const doc = scanToml(text);
-  const owned = doc.tables.filter((t) => t.path.length >= path.length && path.every((seg, k) => t.path[k] === seg));
-  const block = tomlBlock(path, value);
-  if (owned.length === 0) {
-    const sep = text === "" ? "" : text.endsWith("\n\n") ? "" : text.endsWith("\n") ? "\n" : "\n\n";
-    return text + sep + block;
+  const cur = hostConfigValueAt(doc.value, path);
+  if (sameValue(cur, value)) return text;
+  const inline = doc.keys.find((k) => k.inline && k.full.length < path.length && under(path, k.full));
+  if (inline !== undefined) { // an ancestor is an inline table (a = { b = {...} }): it cannot be extended, so it becomes a table
+    const whole = withValueAt(hostConfigValueAt(doc.value, inline.full), path.slice(inline.full.length), value);
+    return replaceToml(text, doc, inline.full, whole as Record<string, unknown>);
   }
-  let out = text.slice(0, owned[0].start) + block;
-  let cursor = owned[0].end;
-  for (const t of owned.slice(1)) {
-    out += text.slice(cursor, t.start).trim() === "" ? "" : text.slice(cursor, t.start);
-    cursor = t.end;
+  if (isPlainObject(cur) && isPlainObject(value)) {
+    const names = [...new Set([...Object.keys(cur), ...Object.keys(value)])].filter((k) => !sameValue(cur[k], value[k]));
+    if (names.every((k) => tableLike(cur[k]) && tableLike(value[k]))) {
+      let out = text;
+      for (const k of names) out = setTomlText(out, [...path, k], value[k]);
+      return out;
+    }
   }
-  const tail = text.slice(cursor);
-  return out + (tail === "" || block.endsWith("\n\n") ? "" : "\n") + tail;
+  return replaceToml(text, doc, path, value);
 }
 
 function setText(agent: AgentId, path: string, text: string, format: HostConfigFormat, key: KeyPath, value: unknown): string {
   try {
-    return format === "toml" ? setTomlText(text, key, value) : setJsonText(text, format, key, value);
+    if (format !== "toml") return setJsonText(text, format, key, value);
+    const out = setTomlText(text, key, value);
+    const landed = hostConfigValueAt(tomlValue(out), key);
+    const emptyTable = isPlainObject(value) && Object.keys(value).length === 0; // an empty table has no TOML text: it reads back as missing
+    if (!sameValue(landed, value) && !(emptyTable && landed === undefined)) throw new SyntaxError("edit did not land");
+    return out;
   } catch {
     throw new CtxError("CONFIG_PARSE_FAILED", { agent, path, format });
   }
