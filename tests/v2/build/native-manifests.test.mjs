@@ -108,6 +108,37 @@ test("[ADR-0023] native/codex: packed .codex-plugin/plugin.json names shipped mc
   assertSkills(pkg, m.skills, "mcp__context_mode__", "codex");
 });
 
+// W-CODEX-7 (proven live, codex-cli 0.156.1, root path with a space): Codex expands ${PLUGIN_ROOT} in a hook command
+// (inside the quotes, one token) and sets the MCP server cwd to the plugin root for cwd ".", but passes ${PLUGIN_ROOT}
+// in MCP args through as a literal. So hooks may use the variable, and the server entry must stay relative.
+// Quote-aware split, no regex: a double-quoted run is one token (what cmd.exe, PowerShell and sh all do here).
+function splitQuoted(line) {
+  const out = []; let cur = ""; let quoted = false; let has = false;
+  for (const ch of line) {
+    if (ch === '"') { quoted = !quoted; has = true; continue; }
+    if (ch === " " && !quoted) { if (has) out.push(cur); cur = ""; has = false; continue; }
+    cur += ch; has = true;
+  }
+  if (has) out.push(cur);
+  return out;
+}
+test("[W-CODEX-7] native/codex: hook command is node + one quoted ${PLUGIN_ROOT} token; a Windows root with a space stays one token", () => {
+  const winRoot = "C:\\Users\\Jane Doe\\.codex\\plugins\\cache\\context-mode\\context-mode\\2.0.0";
+  const cmds = hookCommands(json(pkg, ".codex-plugin/hooks.json"));
+  assert.ok(cmds.length > 0);
+  for (const c of cmds) {
+    const tokens = splitQuoted(c.split("${PLUGIN_ROOT}").join(winRoot));
+    assert.deepEqual(tokens, ["node", winRoot + "/hook.mjs", "--agent", "codex"], c);
+  }
+});
+test("[W-CODEX-7] native/codex: mcp.json keeps cwd \".\" and relative args (Codex does not expand ${...} in args)", () => {
+  const s = json(pkg, ".codex-plugin/mcp.json").mcpServers["context-mode"];
+  assert.equal(s.cwd, ".");
+  assert.equal(s.command, "node");
+  assert.ok(s.args[0].startsWith("./"), "server path is relative to the plugin root: " + s.args[0]);
+  for (const a of s.args) assert.ok(!a.includes("${"), "no placeholder in args: " + a);
+});
+
 test("[ADR-0023] native/gemini+qwen: packed extension manifests name shipped server and hooks; no context file", () => {
   const g = json(pkg, "gemini-extension.json");
   assert.equal(g.version, VERSION);
