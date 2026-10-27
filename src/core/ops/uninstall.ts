@@ -5,7 +5,7 @@ import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AGENT_HOME_DIR, DATA_PLUGINS_DIR_NAME, OPENCODE_BASE_CONFIG_FILE, OPENCODE_GIT_SPEC, OPENCODE_PLUGIN_KEY,
-  OWN_MCP_ENTRY, OWNER_STOP_EXT, OWNERS_DIR_NAME, PI_AGENT_DIR, PI_AGENT_DIR_ENV, PI_GIT_PACKAGE,
+  OWN_MCP_ENTRY, OWNER_STOP_EXT, OWNERS_DIR_NAME, PI_GIT_PACKAGE,
   PI_PACKAGE_SOURCE_KEY, PI_PACKAGES_KEY, PROJECTS_DIR_NAME, SETTINGS_FILE, UPGRADE_AREA_KEY_SEP,
   UPGRADE_CACHE_AREA, UPGRADE_CACHE_BY_HAND, UPGRADE_CONFIG_AREA, UPGRADE_DATA_AREA, UPGRADE_DATA_DELETED,
   UPGRADE_DATA_KEPT, UPGRADE_NOT_FOUND, UPGRADE_OWN_ENTRY, UPGRADE_REMOVED, UPGRADE_SERVER_AREA,
@@ -14,7 +14,7 @@ import {
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow, AgentId, ProjectContext, UpgradeChangeRow } from "../contracts/types.ts";
 import { isInside } from "../project/contain.ts";
-import { opencodeDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
+import { opencodeDirOf, piAgentDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { listLiveOwners } from "../store/owners.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig, writeHostConfigEdit } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -137,7 +137,7 @@ function ownEntries(agent: AgentId, env: NodeJS.ProcessEnv): OwnEntry[] {
     }];
   }
   if (agent === "pi") {
-    const agentDir = env[PI_AGENT_DIR_ENV] ?? join(home, ...AGENT_HOME_DIR.pi, PI_AGENT_DIR); // Pi's own dir rule (#1035)
+    const agentDir = piAgentDirOf(env, home); // Pi's own dir rule (#1035)
     return [{
       file: join(agentDir, SETTINGS_FILE),
       key: PI_PACKAGES_KEY,

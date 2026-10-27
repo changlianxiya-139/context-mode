@@ -331,7 +331,7 @@ export function detectV1(agent: AgentId, home: string, scope: V1Scope = {}): V1F
       break;
     case "vscode": scanVscode(agentHome, project, out); break;
     case "kiro": scanKiro(agentHome, project, out); break;
-    case "pi": scanPi(scope.piAgentDir ?? join(agentHome, PI_AGENT_DIR), agentHome, out); break;
+    case "pi": scanPi(scope.piAgentDir !== undefined && scope.piAgentDir !== "" ? scope.piAgentDir : join(agentHome, PI_AGENT_DIR), agentHome, out); break; // D-WIN-PIDIR-1: empty is unset
     case "opencode": scanOpencode(agentHome, out); break;
     case "zcode": scanZcode(agentHome, out); break;
   }

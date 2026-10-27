@@ -4,12 +4,12 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  AGENT_HOME_DIR, HOST_CONFIG_TMP_SUFFIX, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, PI_AGENT_DIR, PI_AGENT_DIR_ENV,
+  AGENT_HOME_DIR, HOST_CONFIG_TMP_SUFFIX, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY,
   SETTINGS_FILE, UPGRADE_AREA_KEY_SEP, UPGRADE_TRASH_SUFFIX,
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
 import { type AtomicOptions, removeTmpFile, renameWithRetry, replaceFailure, unlinkWithRetry } from "./atomic-file.ts";
-import { opencodeDirOf } from "../project/config-dir.ts";
+import { opencodeDirOf, piAgentDirOf } from "../project/config-dir.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 import { withLayout } from "./host-text.ts";
 
@@ -30,7 +30,7 @@ export function hostConfigPath(agent: AgentId, home: string, env: NodeJS.Process
   if (own !== undefined) return join(home, ...own.file);
   switch (agent) {
     case "opencode": return join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE); // D-WIN-OPENCODE-DIR-1
-    case "pi": return join(env[PI_AGENT_DIR_ENV] ?? join(home, ...AGENT_HOME_DIR.pi, PI_AGENT_DIR), SETTINGS_FILE);
+    case "pi": return join(piAgentDirOf(env, home), SETTINGS_FILE);
     case "copilot-cli": return null;
     default: return join(home, ...AGENT_HOME_DIR[agent], SETTINGS_FILE);
   }

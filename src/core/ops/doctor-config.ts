@@ -9,13 +9,13 @@ import {
   D5B_DETAIL, D5B_FIX, DOCTOR_FIX_UPGRADE, DOCTOR_LABEL, DOCTOR_PASS_DETAIL, HOOK_COMMAND_FIELD, HOOK_COMMAND_SEP,
   HOOK_ENTRY_FILE, HOOK_SCRIPT_SEPS, HOOK_GROUP_HOOKS_FIELD, HOOKS_JSON_FILE, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND, EXE_SUFFIX,
   HOOKS_KEY, MCP_ANY_MATCH, POST_TOOL_USE, KIRO_ACTION_FIELD, KIRO_TOOL_MATCHERS, KIRO_TRIGGER_FIELD, MATCHER_ALT, MATCHER_ANY, MATCHER_CLOSE, MATCHER_OPEN,
-  OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, OWN_TOOL_PREFIX, PI_AGENT_DIR, PI_AGENT_DIR_ENV, REGEX_ESCAPE,
+  OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, OWN_TOOL_PREFIX, REGEX_ESCAPE,
   REGEX_SPECIAL_CHARS, SETTINGS_FILE, SHELL_QUOTE, TOOL_HOOK_EVENTS, V1_PATH_SEPS, VSCODE_CLAUDE_HOOKS_SETTING,
   VSCODE_DIR_NAME, VSCODE_SETTINGS_FILE,
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, DoctorRow } from "../contracts/types.ts";
 import { hasReplace } from "../../adapters/table.ts";
-import { codexDirOf, copilotDirOf, homeDirOf, opencodeDirOf } from "../project/config-dir.ts";
+import { codexDirOf, copilotDirOf, homeDirOf, opencodeDirOf, piAgentDirOf } from "../project/config-dir.ts";
 import { detectV1, type V1Scope } from "./detect-v1.ts";
 import { hostConfigValueAt, mergeOwnEntries, parseHostConfig, readHostConfig } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -122,8 +122,7 @@ function mcpFile(row: AdapterRow, home: string, env: NodeJS.ProcessEnv): string 
   if (spec !== undefined) return join(home, ...spec.file);
   if (row.id === "opencode") return join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE); // D-WIN-OPENCODE-DIR-1
   if (row.id === "pi") {
-    const dir = env[PI_AGENT_DIR_ENV];
-    return join(dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR.pi, PI_AGENT_DIR), SETTINGS_FILE);
+    return join(piAgentDirOf(env, home), SETTINGS_FILE);
   }
   return null; // marketplace/extension/plugin: the MCP entry ships in the plugin manifest under the plugin root
 }

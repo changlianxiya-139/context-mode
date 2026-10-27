@@ -5,7 +5,7 @@ import { existsSync, realpathSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod/v4";
 import {
-  PI_AGENT_DIR_ENV, PLUGIN_CURRENT_LINK, RELEASE_REPO_URL, TABLE_CELL_SEP, TABLE_PIPE,
+  PLUGIN_CURRENT_LINK, RELEASE_REPO_URL, TABLE_CELL_SEP, TABLE_PIPE,
   TABLE_PIPE_ESCAPED, TABLE_ROW_END, TABLE_ROW_START, UPGRADE_CACHE_AREA, UPGRADE_CHECKOUT_AREA, UPGRADE_DEFAULT_MODE,
   UPGRADE_GIT_CHECKOUT_AGENTS, UPGRADE_HOST_AREA, UPGRADE_HOST_COMMAND, UPGRADE_HOST_MANUAL, UPGRADE_MODES,
   UPGRADE_NOT_FOUND, UPGRADE_PLUGIN_ROOT_AREA, UPGRADE_REMOVED, UPGRADE_RESTART_LINE, UPGRADE_TABLE_HEADER,
@@ -14,7 +14,7 @@ import {
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow, CtxUpgradeInput, ProjectContext, ToolContext, ToolReply, UpgradeChangeRow } from "../contracts/types.ts";
 import { getAdapter } from "../../adapters/table.ts";
-import { claudeDirOf, copilotDirOf, opencodeDirOf, requireHomeDir } from "../project/config-dir.ts";
+import { claudeDirOf, copilotDirOf, opencodeDirOf, piAgentDirOf, requireHomeDir } from "../project/config-dir.ts";
 import { detectV1 } from "../ops/detect-v1.ts";
 import { regenerateHostConfig, type HostFileWriter } from "../ops/host-write.ts";
 import { resolvePluginRoot } from "../ops/plugin-root.ts";
@@ -103,7 +103,7 @@ async function upgrade(adapter: AdapterRow, deps: UpgradeDeps, home: string): Pr
       ? (done = await checkout(adapter, deps)).rows
       : [hostRow(adapter)];
     const step5 = regenerateHostConfig(adapter, home, { env: deps.env, write: deps.write });
-    const findings = detectV1(adapter.id, home, { project: deps.project.worktree, piAgentDir: deps.env[PI_AGENT_DIR_ENV], claudeDir: claudeDirOf(deps.env, home), copilotDir: copilotDirOf(deps.env, home), opencodeDir: opencodeDirOf(deps.env, home) });
+    const findings = detectV1(adapter.id, home, { project: deps.project.worktree, piAgentDir: piAgentDirOf(deps.env, home), claudeDir: claudeDirOf(deps.env, home), copilotDir: copilotDirOf(deps.env, home), opencodeDir: opencodeDirOf(deps.env, home) });
     removal = removeV1(adapter.id, findings);
     const rows = [...step4, ...step5, ...removal.rows];
     removal.commit();
