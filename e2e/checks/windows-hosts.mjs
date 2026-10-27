@@ -415,6 +415,7 @@ async function main() {
     delete env.FAKE;
     if (WIN) { env.APPDATA = path.join(home, "AppData", "Roaming"); env.LOCALAPPDATA = path.join(home, "AppData", "Local"); }
     delete env.CODEX_HOME;
+    delete env.XDG_CONFIG_HOME; delete env.OPENCODE_CONFIG_DIR; // D-WIN-OPENCODE-DIR-1: OpenCode reads these before <home>/.config; the runner sets XDG_CONFIG_HOME
     stepSetup(h.id, env);
     stepDoctor(h.id, env);
     stepHook(h.id, home, project, env);

@@ -97,6 +97,7 @@ test("[M6] GP-SETUP/npm-pack-install-setup-twice-remove: the packed npm bin sets
     [pathKey]: [fakeBin, claudePkg, binDir, process.env[pathKey] ?? ""].join(path.delimiter),
   };
   delete env.CLAUDE_PROJECT_DIR;
+  delete env.XDG_CONFIG_HOME; delete env.OPENCODE_CONFIG_DIR; // D-WIN-OPENCODE-DIR-1: the fake CLI and setup both use <home>/.config/opencode
   // D3 timing is gated once, by e2e/checks/setup-hook-overhead.mjs (DEVIATIONS D-CI-PERF-1). This functional case
   // lifts the product's timing knob so shared-runner jitter cannot fail setup or doctor; every other check still runs.
   env.CM_HOOK_OVERHEAD_BUDGET_MS = "60000";
