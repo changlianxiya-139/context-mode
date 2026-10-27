@@ -1,27 +1,46 @@
 # Install context-mode v2
 
-Two commands install context-mode v2 for every agent on your machine. Setup finds your agents, shows a plan, applies it, then checks each agent (MCP handshake, one hook call). A failed agent is rolled back byte for byte.
+Use your agent's own install command. Each line below is the native command, then the native update command. After it, run the check: `context-mode doctor`.
+
+`next` is the v2 prerelease tag on npm. `latest` stays on the old release until the owner moves it. The agents with no install command of their own use the npm route: `npm i -g context-mode@next`, then `context-mode setup`.
 
 ## Requirements
 
 - Node 24.15.0 or later. v2 uses the built-in `node:sqlite`.
-- npm.
 - At least one supported agent. Run `context-mode setup --list` to see which ones work.
 
 ## Install
+
+| Agent | Install | Update |
+|---|---|---|
+| Claude Code | `claude plugin marketplace add mksglu/context-mode`, then `claude plugin install context-mode@context-mode` | `claude plugin update context-mode@context-mode` |
+| Codex | `codex plugin marketplace add mksglu/context-mode`, then `codex plugin add context-mode@context-mode` | `codex plugin marketplace upgrade context-mode` |
+| Gemini CLI | `gemini extensions install https://github.com/mksglu/context-mode` | `gemini extensions update context-mode` |
+| Qwen Code | `qwen extensions install https://github.com/mksglu/context-mode:context-mode` | `qwen extensions update context-mode` |
+| Pi | `pi install npm:context-mode@next` | `pi update --extensions` |
+| OpenCode | `opencode plugin context-mode@next --global` | `opencode plugin context-mode@next --global --force` |
+| Copilot CLI, Kiro, VS Code, ZCode | `npm i -g context-mode@next`, then `context-mode setup --agents <id>` | `context-mode upgrade` |
+
+Fallback for any agent, and the only route for Copilot CLI, Kiro, VS Code and ZCode:
 
 ```sh
 npm i -g context-mode@next
 context-mode setup
 ```
 
-`@next` is the v2 preview. After the owner moves the `latest` tag, you run `npm i -g context-mode && context-mode setup` without `@next`. Until then a plain `npm i -g context-mode` does not install this version.
+Check, on every agent:
 
-With no terminal (a script or CI), add `--yes`: `context-mode setup --yes`. Setup asks one question, and with no terminal it stops with exit 2 instead.
+```sh
+context-mode doctor
+```
 
-Restart your agent after setup. Then run `/ctx-doctor` in the agent, or `context-mode doctor` in a shell.
+Restart your agent after an install or an update. Then run `/ctx-doctor` in the agent.
 
-## What setup does
+The native step carries the MCP server, the hooks and the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` where the host lets it. `context-mode setup` is the fallback and the repair for the part it cannot do ([ADR-0023](../v2/adr/ADR-0023-native-install.md)). Doctor names the one fix on a FAIL.
+
+With no terminal (a script or CI), add `--yes` to setup: `context-mode setup --yes`. Setup asks one question, and with no terminal it stops with exit 2 instead.
+
+## What setup does (fallback and repair)
 
 1. Finds each agent: its command on `PATH` or its config folder.
 2. Shows the plan: for each agent, the exact command it will run or the exact file change.
@@ -67,7 +86,7 @@ Each page gives one command, what setup changes, how to check it, how to remove 
 
 "Checked in a clean HOME" means the command ran on macOS with a temporary HOME against the npm-packed build, the agent CLI was installed in a temporary prefix, and setup, a second setup, doctor and remove all passed. It does not mean a logged-in agent session fired the hooks: no run did that. No page is checked on Windows.
 
-The git `release` branch stays for two routes: the Claude Code marketplace (ADR-0011 step b) and the Gemini and Qwen git-route extension install. Setup does not need it. See [ADR-0019](../v2/adr/0019-interactive-setup-and-npm-channel.md).
+The git `release` branch goes away: npm is the only release channel ([ADR-0023](../v2/adr/ADR-0023-native-install.md)).
 
 
 ## Hooks, skills and saving
