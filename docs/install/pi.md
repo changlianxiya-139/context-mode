@@ -3,15 +3,30 @@
 ## Install
 
 ```sh
-npm i -g context-mode@next
+pi install npm:context-mode@next
+```
+
+Update:
+
+```sh
+pi update --extensions
+```
+
+Check: `context-mode doctor`
+
+Pi gets the hooks and the skills from the package. Restart Pi after the install.
+
+`next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
+Setup is the fallback and the repair for what the native step cannot do:
+
+```sh
 context-mode setup --agents pi
 ```
 
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents pi`. Without it, setup stops with exit 2.
 
-Restart Pi after setup.
-
-Prefer to do it by hand? Run `context-mode setup --print pi` and follow what it prints.
+To do the setup step by hand, run `context-mode setup --print pi` and follow what it prints.
 
 ## What setup changes
 
