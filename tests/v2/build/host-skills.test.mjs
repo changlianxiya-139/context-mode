@@ -13,7 +13,8 @@ import { ADAPTERS } from "../../../src/adapters/table.ts";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
 import { buildRegistry, renderSkill } from "../../../src/setup/registry.ts";
 import { denyMessage } from "../../../src/core/policy/decide.ts";
-import { COMPACT_POINTER_LINE, prefixToolNames } from "../../../src/core/contracts/constants.ts";
+import { COMPACT_POINTER_LINE, prefixToolNames, SERVER_KEY } from "../../../src/core/contracts/constants.ts";
+import { composeMatcher } from "../../../src/core/ops/doctor-config.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKILLS = ["ctx-doctor", "ctx-stats", "ctx-upgrade"];
@@ -148,4 +149,45 @@ test("[D-HQ-COPILOT-NAMES-3] every shipped copilot-cli text names context-mode-c
   }
   const hint = prefixToolNames(COMPACT_POINTER_LINE, copilot.toolNamePrefix);
   assert.ok(hint.includes("context-mode-ctx_") && !hint.includes("mcp_context-mode_"), hint);
+});
+
+// D-N7-ZCODE-NAMES-1 (2.0.0-next.6 skillOk=false for zcode). ZCode names an MCP tool mcp__<server>__<tool>:
+//  - https://zcode.z.ai/en/docs/subagents ("Tools and MCP"): "add each tool's full name to tools, in the form mcp__<server>__<tool>"
+//  - github.com/zai-org/ZCode apps/zcode-cli/docs/design/v2/mcp.md: "Model-facing tool names: mcp__<server>__<tool>"
+//  - apps/zcode-cli/packages/core/src/mcp/name.ts (toModelVisibleMcpNamePart) and packages/adapters/src/mcp/descriptor.ts:
+//    name: `mcp__${sanitize(server)}__${sanitize(tool)}`, sanitize = every char outside [a-zA-Z0-9_-] becomes "_", runs of "_"
+//    collapse to one. A hyphen stays, so server key "context-mode" gives mcp__context-mode__ctx_stats (not context_mode).
+// This test applies that rule to our server key (setup writes mcp.servers.context-mode) and checks every zcode text uses it.
+function zcodeVisible(name) {
+  let out = "";
+  for (const ch of name) {
+    const ok = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_" || ch === "-";
+    const c = ok ? ch : "_";
+    if (!(c === "_" && out.endsWith("_"))) out += c;
+  }
+  return out === "" ? "unknown" : out;
+}
+
+test("[D-N7-ZCODE-NAMES-1] the zcode prefix, skills, hook deny texts, compact pointer and matcher use the documented mcp__<server>__<tool> name", () => {
+  const zcode = ADAPTERS.find((a) => a.id === "zcode");
+  const documented = "mcp__" + zcodeVisible(SERVER_KEY) + "__";
+  assert.equal(documented, "mcp__context-mode__");
+  assert.equal(zcode.toolNamePrefix, documented);
+  const wrong = ["mcp__context_mode__", "mcp_context-mode_", "context-mode-ctx_", "mcp__plugin_"];
+  const { prefixes, texts } = shipped(out, "zcode");
+  assert.deepEqual(prefixes, [documented]);
+  for (const name of SKILLS) {
+    const tool = name.replace("ctx-", "ctx_");
+    assert.equal(texts[name].includes(" or "), false, `${name} hedges between two names: ${texts[name]}`);
+    assert.equal(texts[name].split(documented + tool).length - 1 >= 1, true, `${name} names ${documented}${tool}`);
+    for (const w of wrong) assert.equal(texts[name].includes(w), false, `${name} names ${w}: ${texts[name]}`);
+  }
+  const hookTexts = [denyMessage("curl", "x", zcode), denyMessage("webfetch", "x", zcode), prefixToolNames(COMPACT_POINTER_LINE, zcode.toolNamePrefix)];
+  for (const t of hookTexts) {
+    assert.ok(t.includes(documented + "ctx_"), t);
+    for (const w of wrong) assert.equal(t.includes(w), false, `${w} in ${t}`);
+  }
+  const matcher = composeMatcher(zcode, "PreToolUse");
+  assert.ok(matcher.includes(documented + "ctx_"), matcher);
+  for (const w of wrong) assert.equal(matcher.includes(w), false, `${w} in ${matcher}`);
 });
