@@ -28,6 +28,8 @@ const SHIPPED_SKILLS = [
   "pi/skills/ctx-stats/SKILL.md", "pi/skills/ctx-doctor/SKILL.md", "pi/skills/ctx-upgrade/SKILL.md",
   // claude-code gets its own rendered copy (plugin.json skills key, 02e28bc4).
   "claude-code/skills/ctx-stats/SKILL.md", "claude-code/skills/ctx-doctor/SKILL.md", "claude-code/skills/ctx-upgrade/SKILL.md",
+  // D-NI-CODEX-1: the codex plugin (.codex-plugin/plugin.json skills) reads its own rendered copy.
+  "codex/skills/ctx-stats/SKILL.md", "codex/skills/ctx-doctor/SKILL.md", "codex/skills/ctx-upgrade/SKILL.md",
 ];
 const REPO_ONLY_PREFIX = ".claude/"; // .claude/skills/release/ stays in the repo (impl/13 §7 step 5)
 const LEGACY_PROTOCOL = "2025-11-25";

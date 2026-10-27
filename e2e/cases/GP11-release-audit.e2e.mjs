@@ -20,7 +20,7 @@ function names(dir, out = []) {
 // (name, version, bin, type, engines, files, pi). It must carry no dependency key, no scripts and no private (D1
 // publishes it); no package.json below the root.
 // D-RN-REPO-1: repository (npm provenance needs repository.url to match the source repo).
-const ALLOWED_ROOT_KEYS = ["bin", "engines", "files", "name", "pi", "repository", "type", "version"];
+const ALLOWED_ROOT_KEYS = ["bin", "engines", "files", "main", "name", "pi", "repository", "type", "version"]; // main: D-NI-OPENCODE-1
 
 test("[M6] GP11/npm-audit-zero-high-critical: release-out has no runtime dependencies, no node_modules, no nested package.json (#1225)", () => {
   assert.ok(existsSync(OUT), "release-out missing (run build/build.mjs first)");
