@@ -52,7 +52,7 @@ test("kiro: a native shell cat of a large file is denied with exit 2 and a ctx_e
   const out = await handleHook("kiro", {
     hook_event_name: "PreToolUse", session_id: "s-kiro", cwd: repo,
     tool_name: "execute_bash", tool_input: { command: "cat big.log" },
-  }, { HOME: root, PATH: process.env.PATH });
+  }, { HOME: root, USERPROFILE: root, PATH: process.env.PATH });
   assert.equal(out.exitCode, 2);
   assert.equal(out.stdout, "");
   assert.ok(out.stderr.includes("ctx_execute"), out.stderr);
@@ -61,7 +61,7 @@ test("kiro: a native shell cat of a large file is denied with exit 2 and a ctx_e
 test("kiro: the hook process writes the deny text to stderr and exits 2", () => {
   const r = spawnSync(process.execPath, [path.join(REPO, "src/entries/hook.ts"), "--agent", "kiro"], {
     input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s-kiro2", cwd: repo, tool_name: "execute_bash", tool_input: { command: "cat big.log" } }),
-    env: { HOME: root, PATH: process.env.PATH }, encoding: "utf8",
+    env: { HOME: root, USERPROFILE: root, PATH: process.env.PATH }, encoding: "utf8",
   });
   assert.equal(r.status, 2, r.stderr);
   assert.equal(r.stdout, "");

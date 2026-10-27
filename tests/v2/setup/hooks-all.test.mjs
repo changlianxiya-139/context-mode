@@ -53,7 +53,7 @@ function sandbox(t) {
   else writeFileSync(path.join(bin, "copilot"), "#!/bin/sh\necho context-mode\n", { mode: 0o755 });
   const win = process.platform === "win32" ? { SystemRoot: process.env.SystemRoot, ComSpec: process.env.ComSpec } : {};
   return { root, home, pkgDir: pkg(root),
-    env: { PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter), HOME: home, CM_HOOK_OVERHEAD_BUDGET_MS: "60000", ...win } };
+    env: { PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter), HOME: home, USERPROFILE: home, CM_HOOK_OVERHEAD_BUDGET_MS: "60000", ...win } };
 }
 
 const hookCmd = (pkgDir, id) => `"${NODE}" "${path.join(pkgDir, "hook.mjs")}" --agent ${id}`;

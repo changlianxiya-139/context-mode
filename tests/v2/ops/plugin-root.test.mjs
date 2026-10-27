@@ -22,7 +22,7 @@ test("[M5] plugin-root/marketplace-resolves-under-HOME-claude-plugins-cache", (t
   const home = tmp(t);
   const cache = path.join(home, ".claude", "plugins", "cache", "anthropics", "context-mode");
   mkdirSync(cache, { recursive: true });
-  const root = resolvePluginRoot({ id: "claude-code", installMode: "marketplace" }, { HOME: home });
+  const root = resolvePluginRoot({ id: "claude-code", installMode: "marketplace" }, { HOME: home, USERPROFILE: home });
   assert.equal(root, cache);
 });
 
@@ -33,14 +33,14 @@ test("[M5] plugin-root/plugin-mode-reads-current-symlink-under-DATA_ROOT", (t) =
   const linkDir = path.join(home, ".context-mode", "plugins", "pi");
   mkdirSync(linkDir, { recursive: true });
   symlinkSync(target, path.join(linkDir, "current"));
-  const root = resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home });
+  const root = resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home, USERPROFILE: home });
   assert.equal(root, target);
 });
 
 test("[M5] plugin-root/missing-path-throws-PLUGIN_ROOT_MISSING", (t) => {
   const home = tmp(t);
   assert.throws(
-    () => resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home }),
+    () => resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home, USERPROFILE: home }),
     (err) => err instanceof CtxError && err.code === "PLUGIN_ROOT_MISSING",
   );
 });
@@ -55,10 +55,10 @@ test("[M5] plugin-root/never-caches-across-calls: a second call after the dir ch
   mkdirSync(linkDir, { recursive: true });
   const link = path.join(linkDir, "current");
   symlinkSync(a, link);
-  const first = resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home });
+  const first = resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home, USERPROFILE: home });
   rmSync(link);
   symlinkSync(b, link);
-  const second = resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home });
+  const second = resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home, USERPROFILE: home });
   assert.notEqual(first, second);
   assert.equal(second, b);
 });

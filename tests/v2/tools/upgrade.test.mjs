@@ -23,7 +23,7 @@ function tmp(t) {
 function deps(home, agent, extra = {}) {
   return {
     project: { projectKey: "0123456789abcdef", worktree: path.join(home, "repo"), agent },
-    env: { HOME: home, PATH: process.env.PATH },
+    env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH },
     signal: new AbortController().signal,
     releaseUrl: "file:///nonexistent",
     ...extra,

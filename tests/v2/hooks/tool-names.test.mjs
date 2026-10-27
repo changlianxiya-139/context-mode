@@ -104,7 +104,7 @@ test("gemini AfterTool `cat big.log`: the deny reason names mcp_context-mode_ctx
   const lines = [];
   for (let i = 0; i < 4000; i++) lines.push("INFO line " + i + " request ok");
   const big = lines.join("\n") + "\n";
-  const env = { HOME: root, PATH: process.env.PATH };
+  const env = { HOME: root, USERPROFILE: root, PATH: process.env.PATH };
   const base = { session_id: "g-names", transcript_path: "", cwd: repo, timestamp: "2026-10-26T00:00:00Z" };
   const at = await handleHook("gemini", { ...base, hook_event_name: "AfterTool", tool_name: "run_shell_command",
     tool_input: { command: "cat big.log" }, tool_response: { llmContent: big, returnDisplay: big } }, env);

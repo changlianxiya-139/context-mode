@@ -30,7 +30,7 @@ function sandbox(t, hookSrc) {
   mkdirSync(pkgDir, { recursive: true });
   writeFileSync(path.join(pkgDir, "hook.mjs"), hookSrc);
   const win = process.platform === "win32" ? { SystemRoot: process.env.SystemRoot, ComSpec: process.env.ComSpec } : {};
-  const env = { PATH: process.env.PATH, HOME: home, ...win };
+  const env = { PATH: process.env.PATH, HOME: home, USERPROFILE: home, ...win };
   return { home, env, reg: buildRegistry({ home, pkgDir, env }) };
 }
 

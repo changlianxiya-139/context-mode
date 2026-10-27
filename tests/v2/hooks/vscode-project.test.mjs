@@ -36,7 +36,7 @@ test("H1: the VS Code shell tools are run_in_terminal, runTerminalCommand, bash,
 });
 
 test("H1: a VS Code hook run from a project resolves it from the payload cwd and denies a large shell read", async () => {
-  const env = { HOME: root, PATH: process.env.PATH };
+  const env = { HOME: root, USERPROFILE: root, PATH: process.env.PATH };
   const out = await handleHook("vscode", {
     hook_event_name: "PreToolUse", session_id: "s-vscode", cwd: repo, timestamp: "2026-10-26T00:00:00Z",
     tool_name: "run_in_terminal", tool_input: { command: "cat big.log" },
@@ -50,7 +50,7 @@ test("H1: a VS Code hook run from a project resolves it from the payload cwd and
 
 // D-HF-VSCODE-DECODE-1: the camelCase payload with hookEventName that next.6 rejected now reaches the shell rule.
 test("D-HF-VSCODE-DECODE-1: a camelCase hook payload (hookEventName) denies a large shell read like the snake_case one", async () => {
-  const env = { HOME: root, PATH: process.env.PATH };
+  const env = { HOME: root, USERPROFILE: root, PATH: process.env.PATH };
   const out = await handleHook("vscode", {
     hookEventName: "preToolUse", sessionId: "s-vscode-camel", cwd: repo, timestamp: 1790000000000,
     toolName: "run_in_terminal", toolArgs: { command: "cat big.log" },
@@ -64,7 +64,7 @@ test("D-HF-VSCODE-DECODE-1: a payload with no readable event is not silent: allo
   const orig = process.stderr.write.bind(process.stderr);
   process.stderr.write = (c) => { lines.push(String(c)); return true; };
   let out;
-  try { out = await handleHook("vscode", { sessionId: "x", cwd: repo }, { HOME: root, PATH: process.env.PATH }); } finally { process.stderr.write = orig; }
+  try { out = await handleHook("vscode", { sessionId: "x", cwd: repo }, { HOME: root, USERPROFILE: root, PATH: process.env.PATH }); } finally { process.stderr.write = orig; }
   assert.deepEqual(out, { stdout: "", exitCode: 0 });
   assert.equal(lines.length, 1, lines.join("|"));
   assert.ok(lines[0].startsWith("hooks: decode failed: vscode: missing required field hook_event_name"), lines[0]);

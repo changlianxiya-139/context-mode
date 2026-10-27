@@ -46,7 +46,7 @@ function storedLabel() {
 }
 
 function run(p) {
-  const env = { PATH: process.env.PATH, HOME: root, CLAUDE_PROJECT_DIR: repo };
+  const env = { PATH: process.env.PATH, HOME: root, USERPROFILE: root, CLAUDE_PROJECT_DIR: repo };
   return spawnSync(process.execPath, [ENTRY, "--agent", "claude-code"], { input: JSON.stringify(p), cwd: repo, env, encoding: "utf8" });
 }
 

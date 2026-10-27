@@ -70,7 +70,7 @@ function sandbox(t) {
   const pkg = makePkg(path.join(root, "pkg"));
   // D-HL-GATE-1: timing is not under test in the cli tests (the D3 gate has its own tests and e2e check): same CI-only
   // knob as the engine, hooks-all and zcode-shape sandboxes, so a loaded host does not flip a PASS row.
-  const env = { PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter), HOME: home, NO_COLOR: "1", LOG: path.join(root, "calls.log"), CM_HOOK_OVERHEAD_BUDGET_MS: "60000" };
+  const env = { PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter), HOME: home, USERPROFILE: home, NO_COLOR: "1", LOG: path.join(root, "calls.log"), CM_HOOK_OVERHEAD_BUDGET_MS: "60000" };
   return { root, home, bin, pkg, env };
 }
 
@@ -231,7 +231,7 @@ test("[WIN] cli/home-rule: setup uses the D-M1-T3-1 home rule (HOME, then USERPR
   const s = sandbox(t);
   codexHome(s);
   const env = { ...s.env, USERPROFILE: s.home };
-  delete env.HOME; // a Windows shell with no HOME: the profile dir is the only home
+  delete env.HOME; // a Windows shell with no HOME: the, USERPROFILE: the profile dir is the only home
   const r = spawnSync(process.execPath, [path.join(s.pkg, "cli.mjs"), "setup", "--dry-run", "--agents", "codex"], { encoding: "utf8", timeout: 60_000, env });
   assert.equal(r.status, 0, r.stderr);
   assert.ok(r.stdout.includes(path.join(s.home, ".codex", "config.toml")), `plan must edit ${s.home}/.codex/config.toml, got:\n${r.stdout}`);

@@ -53,7 +53,7 @@ function fixture() {
   mkdirSync(join(project, ".claude/agents"), { recursive: true });
   mkdirSync(join(home, ".claude/agents"), { recursive: true });
   const put = (dir, name, front) => writeFileSync(join(dir, ".claude/agents", name + ".md"), "---\nname: " + name + "\ndescription: d\n" + front + "---\nbody\n");
-  return { root, project, home, env: { HOME: home }, put, done: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, project, home, env: { HOME: home, USERPROFILE: home }, put, done: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 test("main thread of claude --agent x (agentType, no agentId) is not a subagent call (step 1)", () => {

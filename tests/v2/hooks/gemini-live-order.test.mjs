@@ -33,7 +33,7 @@ test("gemini BeforeAgent prompt then AfterTool run_shell_command cat: the deny r
   for (let i = 0; i < 4000; i++) lines.push(i === 3001 ? FATAL : "INFO line " + i + " request ok");
   const big = lines.join("\n") + "\n";
   writeFileSync(path.join(repo, "big.log"), big);
-  const env = { HOME: root, PATH: process.env.PATH };
+  const env = { HOME: root, USERPROFILE: root, PATH: process.env.PATH };
   const base = { session_id: "g-live", transcript_path: "", cwd: repo, timestamp: "2026-10-26T00:00:00Z" };
 
   const ba = await handleHook("gemini", { ...base, hook_event_name: "BeforeAgent", prompt: "What is the FATAL error in big.log?" }, env);

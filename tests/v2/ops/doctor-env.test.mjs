@@ -25,7 +25,7 @@ function fakeGit(t, stdout, exit = 0) {
   const file = path.join(bin, "git");
   writeFileSync(file, `#!/bin/sh\nprintf '${stdout}'\nexit ${exit}\n`);
   chmodSync(file, 0o755);
-  return { PATH: `${bin}:/bin:/usr/bin`, HOME: path.dirname(bin) };
+  return { PATH: `${bin}:/bin:/usr/bin`, HOME: path.dirname(bin), USERPROFILE: path.dirname(bin) };
 }
 
 const posix = process.platform !== "win32";
@@ -37,7 +37,7 @@ test("[M5] doctor-env/D1-dev-build-is-UNKNOWN-without-spawning-git", async () =>
 });
 
 test("[M5] doctor-env/D1-no-git-or-no-network-is-UNKNOWN-not-FAIL", async (t) => {
-  const row = await run({ PATH: path.join(tmp(t), "empty"), HOME: tmp(t) }, SHA_A);
+  const row = await run({ PATH: path.join(tmp(t), "empty"), HOME: tmp(t), USERPROFILE: tmp(t) }, SHA_A);
   assert.deepEqual(row, { id: "D1", label: "version", status: "UNKNOWN", detail: "no network" });
 });
 

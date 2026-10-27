@@ -81,7 +81,7 @@ function sandbox(t) {
   mkdirSync(bin, { recursive: true });
   // The D3 timing budget is gated by e2e/checks/setup-hook-overhead.mjs; shared runners jitter past 15 ms here.
   return { root, home, bin, pkgDir: fakePkg(root),
-    env: { PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter), HOME: home, CM_HOOK_OVERHEAD_BUDGET_MS: "60000" } };
+    env: { PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter), HOME: home, USERPROFILE: home, CM_HOOK_OVERHEAD_BUDGET_MS: "60000" } };
 }
 
 function put(file, text) {

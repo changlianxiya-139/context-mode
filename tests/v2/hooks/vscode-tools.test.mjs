@@ -72,7 +72,7 @@ test("decode reads each tool's documented input keys", () => {
   assert.deepEqual(d("web_fetch", { url: "https://example.com/a" }), { url: "https://example.com/a" });
 });
 
-const env = () => ({ HOME: root, PATH: process.env.PATH });
+const env = () => ({ HOME: root, USERPROFILE: root, PATH: process.env.PATH });
 const snake = (tool_name, tool_input) => ({ hook_event_name: "PreToolUse", session_id: "s-st", cwd: repo, timestamp: "2026-10-27T00:00:00Z", tool_name, tool_input });
 const camel = (toolName, toolArgs) => ({ hookEventName: "preToolUse", sessionId: "s-ct", cwd: repo, timestamp: 1790000000000, toolName, toolArgs });
 const denied = (out) => {

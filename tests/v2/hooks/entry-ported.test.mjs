@@ -19,7 +19,7 @@ before(() => {
 });
 after(() => rmSync(root, { recursive: true, force: true }));
 const run = (input, env = {}) => spawnSync(process.execPath, [ENTRY, "--agent", "claude-code"],
-  { input, cwd: repo, encoding: "utf8", timeout: 10000, env: { PATH: process.env.PATH, HOME: root, CLAUDE_PROJECT_DIR: repo, ...env } });
+  { input, cwd: repo, encoding: "utf8", timeout: 10000, env: { PATH: process.env.PATH, HOME: root, USERPROFILE: root, CLAUDE_PROJECT_DIR: repo, ...env } });
 
 test("run-hook #414: empty stdin never crashes the host: exit 0, empty stdout, one stderr line", () => {
   const r = run("");

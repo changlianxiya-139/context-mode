@@ -30,7 +30,7 @@ test("D-M7-NG-1: PostToolUse Bash large output in a non-git cwd returns the Bash
   const full = payload.tool_response.stdout;
   const home = join(root, "home");
   mkdirSync(home);
-  const env = { PATH: process.env.PATH, HOME: home, CLAUDE_PROJECT_DIR: work };
+  const env = { PATH: process.env.PATH, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: work };
   const r = spawnSync(process.execPath, [ENTRY, "--agent", "claude-code"], { input: JSON.stringify(payload), cwd: work, env, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.notEqual(r.stdout.trim(), "", "empty stdout: no project, no replace");

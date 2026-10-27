@@ -22,7 +22,7 @@ before(() => {
 after(() => rmSync(root, { recursive: true, force: true }));
 
 function run(args, input, cwd = repo) {
-  const env = { PATH: process.env.PATH, HOME: root, CLAUDE_PROJECT_DIR: repo };
+  const env = { PATH: process.env.PATH, HOME: root, USERPROFILE: root, CLAUDE_PROJECT_DIR: repo };
   return spawnSync(process.execPath, [ENTRY, ...args], { input, cwd, env, encoding: "utf8" });
 }
 
@@ -121,7 +121,7 @@ test("GP7/codex-session-project-dir: codex sessions in X and Y write to their ow
   const x = join(root, "x");
   const y = join(root, "y");
   for (const d of [x, y]) { mkdirSync(d); execFileSync("git", ["init", "-q", d]); }
-  const env = { PATH: process.env.PATH, HOME: root };
+  const env = { PATH: process.env.PATH, HOME: root, USERPROFILE: root };
   for (const [sid, dir] of [["cx-a", x], ["cx-b", y]]) {
     const p = { session_id: sid, cwd: dir, hook_event_name: "UserPromptSubmit", prompt: sid };
     const r = spawnSync(process.execPath, [ENTRY, "--agent", "codex"], { input: JSON.stringify(p), cwd: root, env, encoding: "utf8" });

@@ -40,7 +40,7 @@ function runHook(name, payloadCwd, spawnCwd) {
   payload.transcript_path = join(root, name + "-transcript.jsonl");
   const home = join(root, name + "-home");
   mkdirSync(home);
-  const env = { PATH: process.env.PATH, HOME: home };
+  const env = { PATH: process.env.PATH, HOME: home, USERPROFILE: home };
   const r = spawnSync(process.execPath, [ENTRY, "--agent", "claude-code"], { input: JSON.stringify(payload), cwd: spawnCwd, env, encoding: "utf8" });
   return { r, home, payload, full: payload.tool_response.stdout };
 }
@@ -114,7 +114,7 @@ test("D-FU-PS-1: a project dir that does not exist -> allow plus exactly one std
   const cap = captureStderr();
   let out;
   try {
-    out = await handleHook("claude-code", payload, { PATH: process.env.PATH, HOME: join(root, "gone-home") });
+    out = await handleHook("claude-code", payload, { PATH: process.env.PATH, HOME: join(root, "gone-home"), USERPROFILE: join(root, "gone-home") });
   } finally {
     cap.restore();
   }

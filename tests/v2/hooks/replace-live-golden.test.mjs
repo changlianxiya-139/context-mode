@@ -31,7 +31,7 @@ test("D-M7-RL-1: real 2.1.303 Bash PostToolUse payload gives a Bash-shaped, much
   payload.transcript_path = join(root, "transcript.jsonl");
   const full = payload.tool_response.stdout;
   assert.equal(Buffer.byteLength(full), 8892);
-  const env = { PATH: process.env.PATH, HOME: root, CLAUDE_PROJECT_DIR: repo };
+  const env = { PATH: process.env.PATH, HOME: root, USERPROFILE: root, CLAUDE_PROJECT_DIR: repo };
   const r = spawnSync(process.execPath, [ENTRY, "--agent", "claude-code"], { input: JSON.stringify(payload), cwd: repo, env, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   const hso = JSON.parse(r.stdout).hookSpecificOutput;

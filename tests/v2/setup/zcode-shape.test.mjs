@@ -44,7 +44,7 @@ createInterface({ input: process.stdin }).on("line", (l) => {
   for (const k of ["ctx-doctor", "ctx-stats", "ctx-upgrade"]) cpSync(path.join(REPO, "skills", k), path.join(pkgDir, "skills", k), { recursive: true });
   for (const k of ["ctx-doctor", "ctx-stats", "ctx-upgrade"]) cpSync(path.join(REPO, "skills", k), path.join(pkgDir, "pi", "skills", k), { recursive: true }); // D-HQ-SKILLS-1
   for (const k of ["ctx-doctor", "ctx-stats", "ctx-upgrade"]) cpSync(path.join(REPO, "skills", k), path.join(pkgDir, "claude-code", "skills", k), { recursive: true }); // D-HQ-SKILLS-2
-  return { home, pkgDir, env: { PATH: "/usr/bin:/bin", HOME: home, CM_HOOK_OVERHEAD_BUDGET_MS: "60000" } };
+  return { home, pkgDir, env: { PATH: "/usr/bin:/bin", HOME: home, USERPROFILE: home, CM_HOOK_OVERHEAD_BUDGET_MS: "60000" } };
 }
 
 const cfg = (home) => JSON.parse(readFileSync(path.join(home, ".zcode", "cli", "config.json"), "utf8"));
@@ -111,7 +111,7 @@ test("H2: uninstall drops only mcp.servers.context-mode and keeps the user's oth
   mkdirSync(path.dirname(file), { recursive: true });
   const other = { type: "stdio", command: "o", args: [], enabled: true };
   writeFileSync(file, JSON.stringify({ features: { mcp: true }, mcp: { servers: { other, "context-mode": { type: "stdio", command: "node", args: ["/p/server.mjs"] } } } }, null, 2));
-  runUninstall({ adapter: { id: "zcode", installMode: "hooks+mcp" }, project: { projectKey: "abcdef0123456789" }, env: { HOME: root }, confirmDelete: false });
+  runUninstall({ adapter: { id: "zcode", installMode: "hooks+mcp" }, project: { projectKey: "abcdef0123456789" }, env: { HOME: root, USERPROFILE: root }, confirmDelete: false });
   const doc = JSON.parse(readFileSync(file, "utf8"));
   assert.deepEqual(doc.mcp.servers, { other });
   assert.equal(doc.features.mcp, true, "user feature flag kept");

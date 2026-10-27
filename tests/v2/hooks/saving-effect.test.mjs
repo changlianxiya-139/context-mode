@@ -72,7 +72,7 @@ test("ADR-0020: gemini AfterTool run_shell_command with a large output is replac
   const { handleHook } = await import("../../../src/core/hooks/dispatch.ts");
   const out = await handleHook("gemini", { session_id: "g1", transcript_path: "/tmp/t.json", cwd: repo, hook_event_name: "AfterTool",
     timestamp: "2026-10-25T00:00:00.000Z", tool_name: "run_shell_command", tool_input: { command: "cat logs/app.log", description: "FATAL" },
-    tool_response: { llmContent: big, returnDisplay: big } }, { HOME: root, PATH: process.env.PATH });
+    tool_response: { llmContent: big, returnDisplay: big } }, { HOME: root, USERPROFILE: root, PATH: process.env.PATH });
   assert.equal(out.exitCode, 0);
   const j = JSON.parse(out.stdout);
   assert.equal(j.decision, "deny");

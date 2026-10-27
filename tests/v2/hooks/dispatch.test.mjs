@@ -41,7 +41,7 @@ before(() => {
   execFileSync("git", ["init", "-q", repo]);
   oldHome = process.env.HOME;
   process.env.HOME = root; process.env.USERPROFILE = root; // resolveConfigDir reads the process env (D-M1-T3-5)
-  env = { HOME: root, CLAUDE_PROJECT_DIR: repo, PATH: process.env.PATH };
+  env = { HOME: root, USERPROFILE: root, CLAUDE_PROJECT_DIR: repo, PATH: process.env.PATH };
   mkdirSync(join(repo, ".claude", "agents"), { recursive: true });
   writeFileSync(join(repo, ".claude", "agents", "reader.md"), "---\nname: reader\ntools: Read\n---\nreads\n");
   writeFileSync(join(repo, ".claude", "agents", "sheller.md"), "---\nname: sheller\ntools: Bash\n---\nruns\n");
@@ -114,7 +114,7 @@ test("decode failure: allow shape and one stderr line", async () => {
 });
 
 test("no project: allow, no hint, no DB", async () => {
-  const bare = { HOME: root, PATH: process.env.PATH };
+  const bare = { HOME: root, USERPROFILE: root, PATH: process.env.PATH };
   const out = await handleHook("claude-code", cc({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "curl https://x.y" } }), bare);
   assert.deepEqual(out, { stdout: "", exitCode: 0 });
 });

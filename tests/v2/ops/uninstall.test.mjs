@@ -35,7 +35,7 @@ function owner(home, serverId, pid, key = KEY) {
 }
 
 function run(home, id, installMode, confirmDelete = false, key = KEY, extraEnv = {}) {
-  return runUninstall({ adapter: { id, installMode }, project: { projectKey: key }, env: { HOME: home, ...extraEnv }, confirmDelete });
+  return runUninstall({ adapter: { id, installMode }, project: { projectKey: key }, env: { HOME: home, USERPROFILE: home, ...extraEnv }, confirmDelete });
 }
 
 function area(rows, name) {

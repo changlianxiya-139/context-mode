@@ -231,7 +231,7 @@ test("[M3] GP3/kiro-sessionstart-prints-once", async () => {
     const fx = discoverFixtures().find((f) => f.agent === "kiro" && f.event === "SessionStart");
     assert.ok(fx, "no recorded e2e/fixtures/kiro/<ver>/SessionStart.json");
     const payload = { ...JSON.parse(readFileSync(fx.filePath, "utf8")), cwd: proj, session_id: "gp3-kiro-session-1" };
-    const env = { PATH: process.env.PATH, HOME: home };
+    const env = { PATH: process.env.PATH, HOME: home, USERPROFILE: home };
     const first = await runHookFixture(HOOK_BUNDLE, "kiro", payload, env);
     const second = await runHookFixture(HOOK_BUNDLE, "kiro", payload, env);
     const other = await runHookFixture(HOOK_BUNDLE, "kiro", { ...payload, session_id: "gp3-kiro-session-2" }, env);

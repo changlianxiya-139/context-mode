@@ -34,7 +34,7 @@ function ctxFor(home, agent = "claude-code") {
 
 async function doctor(home, agent = "claude-code", extraEnv = {}) {
   const ctx = ctxFor(home, agent);
-  const host = { env: { HOME: home, PATH: process.env.PATH ?? "", ...extraEnv }, bundleDir: path.join(home, "no-bundle"), piCwd: undefined };
+  const host = { env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? "", ...extraEnv }, bundleDir: path.join(home, "no-bundle"), piCwd: undefined };
   return { ctx, rows: await runDoctorChecks(ctx, getAdapter(agent), host) };
 }
 

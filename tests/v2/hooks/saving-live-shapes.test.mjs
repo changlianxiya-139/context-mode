@@ -43,7 +43,7 @@ function sandbox(t) {
   mkdirSync(path.join(repo, "logs"));
   const big = bigLog();
   writeFileSync(path.join(repo, "logs", "app.log"), big);
-  return { root, repo, big, env: { HOME: root, PATH: process.env.PATH } };
+  return { root, repo, big, env: { HOME: root, USERPROFILE: root, PATH: process.env.PATH } };
 }
 
 test("qwen PreToolUse run_shell_command `cat <large file>` is denied with the ctx_execute redirect (no replace on qwen)", async (t) => {

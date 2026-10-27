@@ -34,7 +34,7 @@ function fixtureRepo(root, branch) {
 }
 
 function envFor(home) {
-  return { HOME: home, PATH: process.env.PATH };
+  return { HOME: home, USERPROFILE: home, PATH: process.env.PATH };
 }
 
 function agentDir(home, agent) {
@@ -92,7 +92,7 @@ test("[M5] release-fetch/argv-form-and-no-prompt-env", async (t) => {
   writeFileSync(path.join(bin, "git"), `#!/bin/sh\nprintf '%s\\n' "$GIT_TERMINAL_PROMPT" "$@" > '${log}'\nexit 3\n`);
   chmodSync(path.join(bin, "git"), 0o755);
   const url = "https://example.invalid/a b;$(x).git";
-  await assert.rejects(fetchRelease("pi", url, { HOME: home, PATH: bin }, new AbortController().signal), (e) => {
+  await assert.rejects(fetchRelease("pi", url, { HOME: home, USERPROFILE: home, PATH: bin }, new AbortController().signal), (e) => {
     assert.equal(e.code, "FETCH_FAILED");
     assert.equal(e.vars.code, "git exit 3: ");
     return true;
@@ -110,7 +110,7 @@ test("[M5] release-fetch/git-not-on-PATH-is-FETCH_FAILED-git-did-not-start", asy
   mkdirSync(home);
   const empty = path.join(root, "empty-bin");
   mkdirSync(empty);
-  await assert.rejects(fetchRelease("pi", "file:///nowhere", { HOME: home, PATH: empty }, new AbortController().signal), (e) => {
+  await assert.rejects(fetchRelease("pi", "file:///nowhere", { HOME: home, USERPROFILE: home, PATH: empty }, new AbortController().signal), (e) => {
     assert.equal(e.code, "FETCH_FAILED");
     assert.equal(e.vars.code, "git did not start");
     return true;

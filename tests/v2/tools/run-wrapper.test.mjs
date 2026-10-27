@@ -22,10 +22,10 @@ function fixture(t) {
   // Two shims named like the release files: the entry picks its job from argv[1]'s file name.
   for (const f of ["run.mjs", C.SEARCH_WRAPPER_FILE]) writeFileSync(join(bundle, f), `import ${JSON.stringify(pathToFileURL(ENTRY).href)};\n`);
   const run = (args) => spawnSync(process.execPath, [join(bundle, "run.mjs"), ...args], {
-    cwd: ws, encoding: "utf8", env: { PATH: process.env.PATH, HOME: dir, TMPDIR: tmpdir() },
+    cwd: ws, encoding: "utf8", env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, TMPDIR: tmpdir() },
   });
   const search = (args) => spawnSync(process.execPath, [join(bundle, C.SEARCH_WRAPPER_FILE), ...args], {
-    cwd: ws, encoding: "utf8", env: { PATH: process.env.PATH, HOME: dir, TMPDIR: tmpdir() },
+    cwd: ws, encoding: "utf8", env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, TMPDIR: tmpdir() },
   });
   return { ws, bundle, run, search };
 }

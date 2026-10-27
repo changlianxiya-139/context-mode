@@ -36,7 +36,7 @@ before(() => {
   execFileSync("git", ["init", "-q", repo]);
   oldHome = process.env.HOME;
   process.env.HOME = root; process.env.USERPROFILE = root; // resolveConfigDir reads the process env (D-M1-T3-5)
-  env = { HOME: root, CLAUDE_PROJECT_DIR: repo, PATH: process.env.PATH };
+  env = { HOME: root, USERPROFILE: root, CLAUDE_PROJECT_DIR: repo, PATH: process.env.PATH };
 });
 
 after(() => {

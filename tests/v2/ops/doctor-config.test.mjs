@@ -56,14 +56,14 @@ test("[M5] doctor-config/hook-matcher-valid-regex: composed matcher hits a real 
 test("[M5] doctor-config/D3-codex-pass-no-features-hooks-key-means-true (#1152 #1153)", (t) => {
   const home = tmp(t);
   const row = codexInstall(home);
-  const d3 = checkHostConfig(row, { HOME: home }, home);
+  const d3 = checkHostConfig(row, { HOME: home, USERPROFILE: home }, home);
   assert.equal(d3.status, "PASS", d3.detail);
 });
 
 test("[M5] doctor-config/D3-codex-features-hooks-false-fails-hook-entries", (t) => {
   const home = tmp(t);
   const row = codexInstall(home, { features: "[features]\nhooks = false\n" });
-  const d3 = checkHostConfig(row, { HOME: home }, home);
+  const d3 = checkHostConfig(row, { HOME: home, USERPROFILE: home }, home);
   assert.equal(d3.status, "FAIL");
   assert.equal(d3.detail, "wrong: hook entries");
   assert.equal(d3.fixCommand, "run ctx_upgrade");
@@ -72,19 +72,19 @@ test("[M5] doctor-config/D3-codex-features-hooks-false-fails-hook-entries", (t) 
 test("[M5] doctor-config/D3-wrong-matcher-names-hook-entries", (t) => {
   const home = tmp(t);
   const row = codexInstall(home, { matcher: "Bash" });
-  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: hook entries");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).detail, "wrong: hook entries");
 });
 
 test("[M5] doctor-config/D3-bad-timeout-names-hook-timeout", (t) => {
   const home = tmp(t);
   const row = codexInstall(home, { timeout: "5" });
-  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: hook timeout");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).detail, "wrong: hook timeout");
 });
 
 test("[M5] doctor-config/user-hook-timeout-kept: a user-set timeout is a valid value, not a FAIL (#1226)", (t) => {
   const home = tmp(t);
   const row = codexInstall(home, { timeout: 45 });
-  assert.equal(checkHostConfig(row, { HOME: home }, home).status, "PASS");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).status, "PASS");
 });
 
 test("[D-N6-CODEX-HOME-2] doctor-config/D3 reads codex config.toml and hooks.json from CODEX_HOME when it is set", (t) => {
@@ -92,7 +92,7 @@ test("[D-N6-CODEX-HOME-2] doctor-config/D3 reads codex config.toml and hooks.jso
   const codexDir = path.join(tmp(t), "codex-home");
   const row = codexInstall(home, { codexDir });
   assert.equal(checkHostConfig(row, { HOME: home, CODEX_HOME: codexDir }, home).status, "PASS");
-  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry, hook entries");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).detail, "wrong: MCP entry, hook entries");
   codexInstall(home, { codexDir, features: "[features]\nhooks = false\n" });
   assert.equal(checkHostConfig(row, { HOME: home, CODEX_HOME: codexDir }, home).detail, "wrong: hook entries");
   assert.equal(checkHostConfig(row, { HOME: home, CODEX_HOME: "" }, home).detail, "wrong: MCP entry, hook entries");
@@ -100,7 +100,7 @@ test("[D-N6-CODEX-HOME-2] doctor-config/D3 reads codex config.toml and hooks.jso
 
 test("[M5] doctor-config/D3-empty-home-names-all-three-parts-for-codex", (t) => {
   const home = tmp(t);
-  const d3 = checkHostConfig(getAdapter("codex"), { HOME: home }, home);
+  const d3 = checkHostConfig(getAdapter("codex"), { HOME: home, USERPROFILE: home }, home);
   assert.equal(d3.status, "FAIL");
   assert.equal(d3.detail, "wrong: MCP entry, hook entries");
 });
@@ -109,7 +109,7 @@ test("[M5] doctor-config/D3-broken-config-is-FAIL-not-throw", (t) => {
   const home = tmp(t);
   const row = codexInstall(home);
   put(path.join(home, ".codex", "hooks.json"), "{ not json");
-  assert.equal(checkHostConfig(row, { HOME: home }, home).status, "FAIL");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).status, "FAIL");
 });
 
 test("[M5] doctor-config/D4-folds-every-finding-into-one-row", (t) => {
@@ -148,7 +148,7 @@ test("[M7] doctor-config/D3-pi-reports-default-agent-dir-path (#1266)", (t) => {
   const home = tmp(t);
   const dir = path.join(home, ".pi", "agent");
   piSettings(dir, [PI_GIT]);
-  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home }, home);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, USERPROFILE: home }, home);
   assert.equal(d3.status, "PASS", d3.detail);
   assert.ok(d3.detail.includes(path.join(dir, "settings.json")), d3.detail);
 });
@@ -157,7 +157,7 @@ test("[M7] doctor-config/D3-pi-PI_CODING_AGENT_DIR-wins, legacy path never named
   const home = tmp(t);
   const custom = tmp(t);
   piSettings(custom, [PI_GIT]);
-  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, PI_CODING_AGENT_DIR: custom }, home);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: custom }, home);
   assert.equal(d3.status, "PASS", d3.detail);
   assert.ok(d3.detail.includes(path.join(custom, "settings.json")), d3.detail);
   assert.ok(!d3.detail.includes(path.join(home, ".pi")), d3.detail);
@@ -166,7 +166,7 @@ test("[M7] doctor-config/D3-pi-PI_CODING_AGENT_DIR-wins, legacy path never named
 test("[M7] doctor-config/D3-pi-missing-package-FAIL-names-the-file-read", (t) => {
   const home = tmp(t);
   const custom = tmp(t);
-  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, PI_CODING_AGENT_DIR: custom }, home);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: custom }, home);
   assert.equal(d3.status, "FAIL");
   assert.ok(d3.detail.startsWith("wrong: MCP entry"), d3.detail);
   assert.ok(d3.detail.includes(path.join(custom, "settings.json")), d3.detail);
@@ -179,7 +179,7 @@ test("[D-N6-CODEX-DIRECT-1] doctor-config/D3 names the MCP entry when the codex 
   const file = path.join(home, ".codex", "config.toml");
   const text = readFileSync(file, "utf8");
   put(file, text.split('omit_tools_from = ["deferred"]\n').join(""));
-  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).detail, "wrong: MCP entry");
 });
 
 test("[D-N7-CODEX-APPROVE-1] doctor-config/D3 names the MCP entry when the codex entry lacks default_tools_approval_mode approve", (t) => {
@@ -188,7 +188,7 @@ test("[D-N7-CODEX-APPROVE-1] doctor-config/D3 names the MCP entry when the codex
   const file = path.join(home, ".codex", "config.toml");
   const text = readFileSync(file, "utf8");
   put(file, text.split('default_tools_approval_mode = "approve"\n').join(""));
-  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry");
+  assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).detail, "wrong: MCP entry");
 });
 
 // W-CODEX-1 (D-VT-DOCTOR-CMD-1): setup writes `"<execPath>" "<dir>/hook.mjs" --agent <id>`; doctor must own it.
@@ -202,7 +202,7 @@ test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 owns the quoted absolute-path hook co
   for (const cmd of cmds) {
     const home = tmp(t);
     const row = codexInstall(home, { cmd });
-    const d3 = checkHostConfig(row, { HOME: home }, home);
+    const d3 = checkHostConfig(row, { HOME: home, USERPROFILE: home }, home);
     assert.equal(d3.status, "PASS", `${cmd}: ${d3.detail}`);
   }
 });
@@ -218,7 +218,7 @@ test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 rejects a hook command whose first to
   for (const cmd of cmds) {
     const home = tmp(t);
     const row = codexInstall(home, { cmd });
-    assert.equal(checkHostConfig(row, { HOME: home }, home).status, "FAIL", cmd);
+    assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).status, "FAIL", cmd);
   }
 });
 
@@ -228,7 +228,7 @@ test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 owns the exact command setup builds f
   const cmd = hookCommandString({ hookCommand: [process.execPath, path.join(tmp(t), "dir with space", "hook.mjs"), "--agent", "codex"] });
   const home = tmp(t);
   const row = codexInstall(home, { cmd });
-  const d3 = checkHostConfig(row, { HOME: home }, home);
+  const d3 = checkHostConfig(row, { HOME: home, USERPROFILE: home }, home);
   assert.equal(d3.status, "PASS", `${cmd}: ${d3.detail}`);
 });
 
@@ -252,13 +252,13 @@ async function extensionInstall(t, id, mutate = (s) => s) {
 for (const id of ["gemini", "qwen"]) {
   test(`[GEM-WIN-4] doctor-config/D3 reads the ${id} extension hook file the build generates and passes`, async (t) => {
     const { home, row } = await extensionInstall(t, id);
-    const d3 = checkHostConfig(row, { HOME: home }, home);
+    const d3 = checkHostConfig(row, { HOME: home, USERPROFILE: home }, home);
     assert.equal(d3.status, "PASS", d3.detail);
   });
 
   test(`[GEM-WIN-4] doctor-config/D3 fails a ${id} extension whose hook command is not ours`, async (t) => {
     const { home, row } = await extensionInstall(t, id, (s) => s.replaceAll("hook.mjs", "other.mjs"));
-    assert.equal(checkHostConfig(row, { HOME: home }, home).status, "FAIL");
+    assert.equal(checkHostConfig(row, { HOME: home, USERPROFILE: home }, home).status, "FAIL");
   });
 }
 
@@ -266,5 +266,5 @@ test("[GEM-WIN-4] doctor-config/D3 gemini: the ${/} token is a separator, a bare
   const real = await extensionInstall(t, "gemini");
   assert.match(readFileSync(real.file, "utf8"), /\$\{extensionPath\}\$\{\/\}hook\.mjs/);
   const bad = await extensionInstall(t, "gemini", (s) => s.replaceAll("${extensionPath}${/}hook.mjs", "${extensionPath}hook.mjs"));
-  assert.equal(checkHostConfig(bad.row, { HOME: bad.home }, bad.home).status, "FAIL");
+  assert.equal(checkHostConfig(bad.row, { HOME: bad.home, USERPROFILE: bad.home }, bad.home).status, "FAIL");
 });
