@@ -79,8 +79,13 @@ function run(file, args, { env, cwd, input, timeout = STEP_TIMEOUT_MS } = {}) {
   return { status: r.status, signal: r.signal, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message };
 }
 /** Run a command line string through the platform shell, as a host runs a command hook. */
-function runShellLine(line, { env, cwd, input, timeout = 60_000 }) {
-  const r = spawnSync(line, { shell: true, env, cwd, input, encoding: "utf8", timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+// GEM-WIN-5 (D-WIN-GEMINI-SHELL-1): Gemini CLI runs a hook as `powershell.exe -NoProfile -Command <line>` on Windows
+// (gemini-cli shell-utils getShellConfiguration), not cmd.exe, so its line goes through PowerShell here.
+function runShellLine(line, { env, cwd, input, timeout = 60_000, powershell = false }) {
+  const opts = { env, cwd, input, encoding: "utf8", timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 };
+  const r = powershell && WIN
+    ? spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", line + "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"], opts)
+    : spawnSync(line, { shell: true, ...opts });
   return { status: r.status, signal: r.signal, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message };
 }
 
@@ -308,7 +313,7 @@ function stepHook(id, home, project, env) {
     writeFileSync(path.join(project, "big.log"), text);
     const line = registeredHook(id, home, project, notes);
     const spec = HOOKS[id];
-    const r = runShellLine(line, { env, cwd: project, input: JSON.stringify(payloadFor(id, project, text)) });
+    const r = runShellLine(line, { env, cwd: project, input: JSON.stringify(payloadFor(id, project, text)), powershell: id === "gemini" });
     const seen = spec.answerOn === "stderr" ? r.stderr : r.stdout;
     const cmdNote = `command=${line.slice(0, 260)}${notes.length ? " NOTE " + notes.join("; ") : ""}`;
     if (r.error || r.status === null) return record(id, "hook", false, `did not finish: ${r.error ?? r.signal}; ${cmdNote}`);
