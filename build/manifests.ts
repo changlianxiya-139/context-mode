@@ -66,10 +66,10 @@ const events = (row: AdapterRow): [string, string][] => Object.entries(row.event
 const isToolEvent = (canonical: string): boolean => TOOL_EVENTS.includes(canonical);
 
 // {hooks:{<Event>:[{matcher?,hooks:[{type,command,timeout}]}]}} — Claude shape (claude-code, codex, qwen) and gemini.
-function nestedShape(row: AdapterRow, timeout: number, withMatcher: boolean): JsonObject {
+function nestedShape(row: AdapterRow, timeout: number, withMatcher: boolean, cmd: JsonObject = command(row)): JsonObject {
   const hooks: JsonObject = {};
   for (const [canonical, native] of events(row)) {
-    const group: JsonObject = { hooks: [{ ...command(row), timeout }] };
+    const group: JsonObject = { hooks: [{ ...cmd, timeout }] };
     if (withMatcher && isToolEvent(canonical)) group.matcher = buildMatcher(row, native);
     hooks[native] = [group];
   }
@@ -157,28 +157,49 @@ function manifestFor(row: AdapterRow, version: string): [string, JsonObject] | n
 // name, version, bin (no "./": npm 11 strips it), type, engines, files = the release tree, and the Pi key that
 // D-FU-RM-PI-1 needs (Pi reads "pi".extensions/skills from the package dir). No dependencies, no scripts, no
 // private: an npm or Pi install of the tree runs nothing.
+// ADR-0023 (D-NI-CODEX-1): `codex plugin add context-mode@context-mode` installs the npm tarball and reads
+// .codex-plugin/plugin.json from its root. Hooks name the bundle by ${PLUGIN_ROOT}; the server keeps the v1 form
+// (cwd "." = plugin root, relative bundle path). Skills ship pre-rendered with the codex tool names.
+const CODEX_PLUGIN_DIR = ".codex-plugin";
+const CODEX_PLUGIN_ROOT = "${PLUGIN_ROOT}";
+export const CODEX_PLUGIN_SKILLS = "codex/skills";
+function codexPlugin(row: AdapterRow, version: string): [string, JsonObject][] {
+  const hookCmd: JsonObject = { type: "command", command: [NODE_COMMAND, '"' + CODEX_PLUGIN_ROOT + "/" + HOOK_BUNDLE + '"', AGENT_FLAG, row.id].join(" ") };
+  return [
+    [CODEX_PLUGIN_DIR + "/plugin.json", {
+      name: SERVER_KEY, version, description: "Context Mode for Codex",
+      mcpServers: "./" + CODEX_PLUGIN_DIR + "/mcp.json", hooks: "./" + CODEX_PLUGIN_DIR + "/hooks.json", skills: "./" + CODEX_PLUGIN_SKILLS + "/",
+      interface: { displayName: SERVER_KEY, category: "Productivity" },
+    }],
+    [CODEX_PLUGIN_DIR + "/mcp.json", { mcpServers: { [SERVER_KEY]: {
+      command: NODE_COMMAND, args: ["./" + SERVER_BUNDLE, AGENT_FLAG, row.id], cwd: ".", default_tools_approval_mode: "approve" } } }],
+    [CODEX_PLUGIN_DIR + "/hooks.json", nestedShape(row, seconds(row), true, hookCmd)],
+  ];
+}
+
 const OUT_PACKAGE_JSON = "package.json";
 const PI_EXTENSION = "./pi/index.js";
 const PI_SKILLS = "./pi/skills"; // D-HQ-SKILLS-1: pi's own rendered copy
+const OPENCODE_MAIN = "./opencode/plugin.js"; // ADR-0023 (D-NI-OPENCODE-1): OpenCode imports the plugin by package name
 const CLI_BUNDLE = "cli.mjs";
 const NODE_ENGINE = ">=24.15.0"; // D1
 
 // D1 "files = the release tree": every top-level name build.mjs writes, except package.json (npm always packs it).
 // build.mjs assertOutTree fails the build when the real tree and this list differ.
 export const OUT_FILES: readonly string[] = [
-  ".claude-plugin", "claude-code", CLI_BUNDLE, "copilot", "fixtures", "gemini-extension.json", HOOK_BUNDLE, HOOKS_DIR, "opencode", "pi",
+  ".claude-plugin", CODEX_PLUGIN_DIR, "claude-code", CLI_BUNDLE, "codex", "copilot", "fixtures", "gemini-extension.json", HOOK_BUNDLE, HOOKS_DIR, "opencode", "pi",
   "qwen-extension.json", "run.mjs", "search.mjs", SERVER_BUNDLE, "skills", RELEASE_SUMS_FILE,
 ].slice().sort();
 // D-RN-REPO-1: npm provenance rejects a publish (E422) unless repository.url names the source repo. This is the
 // `npm pkg fix` form, so check-npm-tarball.mjs's "npm pkg fix is a no-op" gate still holds.
 const REPOSITORY = { type: "git", url: "git+https://github.com/mksglu/context-mode.git" };
-const OUT_PACKAGE_KEYS: readonly string[] = ["bin", "engines", "files", "name", "pi", "repository", "type", "version"];
+const OUT_PACKAGE_KEYS: readonly string[] = ["bin", "engines", "files", "main", "name", "pi", "repository", "type", "version"];
 const PI_KEYS: readonly string[] = ["extensions", "skills"];
 
 function npmPackageJson(version: string): JsonObject {
   return {
     name: SERVER_KEY, version, type: "module", bin: { [SERVER_KEY]: CLI_BUNDLE }, engines: { node: NODE_ENGINE },
-    files: [...OUT_FILES], pi: { extensions: [PI_EXTENSION], skills: [PI_SKILLS] }, repository: { ...REPOSITORY },
+    files: [...OUT_FILES], main: OPENCODE_MAIN, pi: { extensions: [PI_EXTENSION], skills: [PI_SKILLS] }, repository: { ...REPOSITORY },
   };
 }
 
@@ -196,6 +217,7 @@ export function assertOutPackageJson(pkg: unknown): void {
   if (JSON.stringify(obj.bin) !== JSON.stringify({ [SERVER_KEY]: CLI_BUNDLE })) throw new Error("package.json: bin must be {" + SERVER_KEY + ": " + CLI_BUNDLE + "}");
   if (JSON.stringify(obj.engines) !== JSON.stringify({ node: NODE_ENGINE })) throw new Error("package.json: engines must be {node: " + NODE_ENGINE + "}");
   if (JSON.stringify(obj.files) !== JSON.stringify(OUT_FILES)) throw new Error("package.json: files must be " + OUT_FILES.join(","));
+  if (obj.main !== OPENCODE_MAIN) throw new Error("package.json: main must be " + OPENCODE_MAIN);
   if (JSON.stringify(obj.repository) !== JSON.stringify(REPOSITORY)) throw new Error("package.json: repository must be " + JSON.stringify(REPOSITORY));
   const pi = obj.pi;
   if (pi === null || typeof pi !== "object" || Array.isArray(pi)) throw new Error("package.json: pi must be an object");
@@ -234,6 +256,7 @@ export function generateManifests(outDir: string, version: string = DEV_VERSION,
         plugins: [{ name: SERVER_KEY, source: "./", description: "Context Mode for Claude Code", version, skills: skillsDir(row) }],
       }]);
     }
+    if (row.id === "codex") files.push(...codexPlugin(row, version));
     const shape = HOOK_SHAPES[row.id];
     if (shape !== null) files.push([hookFile(row), shape(row)]);
   }
