@@ -1,7 +1,7 @@
 // DEVIATIONS D-WIN-ATOMIC-1. The one place that replaces a file by rename. On Windows a rename over a file that
 // another process holds open (the host watching settings.json, antivirus, an indexer) fails with EPERM/EBUSY/EACCES;
 // the hold is short, so retry a few times, then fail with the file name and what to close.
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { ATOMIC_RENAME_BUSY_CODES, ATOMIC_RENAME_DELAY_MS, ATOMIC_RENAME_RETRIES, ATOMIC_TMP_MARK, ATOMIC_TMP_PREFIX } from "../contracts/constants.ts";
@@ -9,6 +9,7 @@ import { ATOMIC_RENAME_BUSY_CODES, ATOMIC_RENAME_DELAY_MS, ATOMIC_RENAME_RETRIES
 export interface AtomicOptions {
   platform?: NodeJS.Platform;
   rename?: (from: string, to: string) => void;
+  unlink?: (file: string) => void;
   sleep?: (ms: number) => void;
 }
 
@@ -27,6 +28,22 @@ export function renameWithRetry(from: string, to: string, opts: AtomicOptions = 
     try { rename(from, to); return; } catch (e) {
       const busy = win && ATOMIC_RENAME_BUSY_CODES.includes(errCode(e) ?? "");
       if (!busy || attempt >= ATOMIC_RENAME_RETRIES) throw e;
+      sleep(ATOMIC_RENAME_DELAY_MS);
+    }
+  }
+}
+
+/** unlinkSync that retries "file in use" codes on win32 only (rollback removes a file the host may hold open).
+ *  A missing file is done. On the last failure the error names the file and what to close. */
+export function unlinkWithRetry(file: string, opts: AtomicOptions = {}): void {
+  const unlink = opts.unlink ?? unlinkSync;
+  const sleep = opts.sleep ?? sleepSync;
+  const win = (opts.platform ?? process.platform) === "win32";
+  for (let attempt = 0; ; attempt += 1) {
+    try { unlink(file); return; } catch (e) {
+      if (errCode(e) === "ENOENT") return;
+      const busy = win && ATOMIC_RENAME_BUSY_CODES.includes(errCode(e) ?? "");
+      if (!busy || attempt >= ATOMIC_RENAME_RETRIES) throw replaceFailure(file, e);
       sleep(ATOMIC_RENAME_DELAY_MS);
     }
   }

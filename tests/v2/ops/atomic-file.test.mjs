@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { atomicWriteFile, renameWithRetry } from "../../../src/core/ops/atomic-file.ts";
+import { atomicWriteFile, renameWithRetry, unlinkWithRetry } from "../../../src/core/ops/atomic-file.ts";
 import { ATOMIC_RENAME_RETRIES } from "../../../src/core/contracts/constants.ts";
 
 function tmp(t) {
@@ -100,4 +100,32 @@ test("[win] atomic-file/no-bare-renameSync-at-the-file-replace-sites", () => {
   for (const f of ["src/setup/engine.ts", "src/core/ops/host-write.ts", "src/core/ops/host-config.ts", "src/core/ops/v1-remove.ts", "src/core/ops/db-heal.ts"]) {
     assert.equal(readFileSync(path.join(import.meta.dirname, "../../..", f), "utf8").includes("renameSync("), false, f);
   }
+});
+
+// Q-WIN-1 / D-WIN-ATOMIC-4: rollback removes a file the setup created. On Windows that unlink fails with
+// EPERM/EBUSY while the host holds the file open, so it retries like the rename does.
+test("[win] atomic-file/unlink-retries-EBUSY-twice-then-succeeds", () => {
+  let n = 0;
+  const unlink = () => { n += 1; if (n <= 2) throw Object.assign(new Error("EBUSY: busy, unlink"), { code: "EBUSY" }); };
+  unlinkWithRetry("C:\\x\\settings.json", { platform: "win32", unlink, sleep: noSleep });
+  assert.equal(n, 3);
+});
+
+test("[win] atomic-file/unlink-does-not-retry-on-posix-and-names-the-file-when-it-gives-up", () => {
+  let n = 0;
+  const unlink = () => { n += 1; throw Object.assign(new Error("EPERM: busy, unlink"), { code: "EPERM" }); };
+  assert.throws(() => unlinkWithRetry("/x/settings.json", { platform: "linux", unlink, sleep: noSleep }), /Could not replace \/x\/settings\.json.*close the program/);
+  assert.equal(n, 1);
+  n = 0;
+  assert.throws(() => unlinkWithRetry("C:\\x\\s.json", { platform: "win32", unlink, sleep: noSleep }), /close the program using C:\\x\\s\.json/);
+  assert.equal(n, ATOMIC_RENAME_RETRIES + 1);
+});
+
+test("[win] atomic-file/unlink-of-a-missing-file-is-not-an-error", () => {
+  const unlink = () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); };
+  unlinkWithRetry("/x/gone.json", { platform: "win32", unlink, sleep: noSleep });
+});
+
+test("[win] atomic-file/setup-rollback-has-no-bare-unlinkSync", () => {
+  assert.equal(readFileSync(path.join(import.meta.dirname, "../../..", "src/setup/engine.ts"), "utf8").includes("unlinkSync("), false);
 });

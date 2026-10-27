@@ -3,7 +3,7 @@
 // Owner decisions D3 (hook overhead budget) and D4 (v1 forms replaced by the absolute form).
 import { CODEX_TRUST_PATH, codexTrustEntries } from "./codex-trust.ts";
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,7 +12,7 @@ import { AGENT_HOME_DIR, DB_FILE_NAME, PROJECTS_DIR_NAME, TOOL_ORDER, UPGRADE_RE
 import { CtxError } from "../core/contracts/errors.ts";
 import type { AgentId, V1Finding } from "../core/contracts/types.ts";
 import { detectV1 } from "../core/ops/detect-v1.ts";
-import { atomicWriteFile, renameWithRetry } from "../core/ops/atomic-file.ts";
+import { atomicWriteFile, renameWithRetry, unlinkWithRetry } from "../core/ops/atomic-file.ts";
 import { editHostConfigText } from "../core/ops/host-config.ts";
 import { hostLayout, hostText, withLayout } from "../core/ops/host-text.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
@@ -571,7 +571,7 @@ function undo(dir: string, entries: Entry[], env: SetupContext["env"]): void {
     if (e.undo) { runBin(e.undo.bin, e.undo.args, env); continue; }
     if (!e.file) continue;
     if (e.existed && e.backup) atomicWrite(e.file, readFileSync(path.join(dir, e.backup), "utf8"));
-    else if (existsSync(e.file)) unlinkSync(e.file);
+    else unlinkWithRetry(e.file); // D-WIN-ATOMIC-4
   }
 }
 
