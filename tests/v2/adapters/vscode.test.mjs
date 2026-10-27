@@ -114,3 +114,33 @@ test("encode replace is a silent no-op: VS Code has no replace channel (ADR-0016
     assert.deepEqual(encode({ ...pre, event }, { kind: "replace", output: "x" }), { stdout: "", exitCode: 0 });
   }
 });
+
+// D-HF-VSCODE-DECODE-1 (next.7). Primary source: docs.github.com/en/copilot/reference/hooks-reference ("Hook event
+// input payloads") and code.visualstudio.com/docs/copilot/customization/hooks (VS Code agent hooks, Preview, Copilot
+// harness; user hook files in ~/.copilot/hooks/): "Event names also select the input format. preToolUse receives
+// toolName and toolArgs. The compatible PreToolUse alias receives snake_case fields." The Local harness reference
+// (code.visualstudio.com/docs/agents/reference/hooks-reference) sends snake_case with tool_response.
+// Setup registers PascalCase names (snake_case payload). A camelCase payload carries camelCase keys only.
+test("D-HF-VSCODE-DECODE-1: camelCase payload with hookEventName (next.6 live) is decoded, not rejected", () => {
+  const camel = { hookEventName: "preToolUse", sessionId: "c-1", timestamp: 1790000000000, cwd: "/tmp/proj", toolName: "run_in_terminal", toolArgs: { command: "cat big.log" } };
+  assert.deepEqual(decode(camel), { event: "PreToolUse", agent: "vscode", sessionId: "c-1", cwd: "/tmp/proj", tool: { name: "run_in_terminal", canonicalName: "Bash", input: { command: "cat big.log" } } });
+  assert.equal(decode({ ...camel, hookEventName: "PreToolUse" }).event, "PreToolUse"); // PascalCase value, same payload
+});
+
+test("D-HF-VSCODE-DECODE-1: documented camelCase payload names no event; each event is read by its own key set", () => {
+  const c = { sessionId: "c-1", timestamp: 1790000000000, cwd: "/tmp/proj" };
+  assert.deepEqual(decode({ ...c, source: "new" }), { event: "SessionStart", agent: "vscode", sessionId: "c-1", cwd: "/tmp/proj", source: "startup" });
+  assert.equal(decode({ ...c, source: "resume" }).source, "resume");
+  assert.deepEqual(decode({ ...c, prompt: "run tests" }), { event: "UserPromptSubmit", agent: "vscode", sessionId: "c-1", cwd: "/tmp/proj", prompt: "run tests" });
+  assert.equal(decode({ ...c, toolName: "run_in_terminal", toolArgs: '{"command":"ls"}' }).tool.input.command, "ls");
+  const post = decode({ ...c, toolName: "run_in_terminal", toolArgs: {}, toolResult: { resultType: "success", textResultForLlm: "out" } });
+  assert.equal(post.event, "PostToolUse");
+  assert.deepEqual(post.result, { isError: false, bytes: 3, text: "out" });
+  assert.equal(decode({ ...c, transcriptPath: "/t", trigger: "auto", customInstructions: "" }).event, "PreCompact");
+});
+
+test("D-HF-VSCODE-DECODE-1: an event that cannot be read throws a line that names the field, never a silent undefined", () => {
+  assert.throws(() => decode({ ...base }), /vscode: missing required field hook_event_name/);
+  assert.throws(() => decode({ hookEventName: "Nope" }), /vscode: unknown hook event Nope/);
+  assert.throws(() => decode({ hook_event_name: "Nope" }), /vscode: unknown hook event Nope/);
+});

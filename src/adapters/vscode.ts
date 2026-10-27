@@ -33,9 +33,67 @@ function readResult(resp: unknown): ToolResultInfo {
   return { isError, bytes: Buffer.byteLength(text), text };
 }
 
+// D-HF-VSCODE-DECODE-1: two documented payload shapes, one key set each, chosen by the event name's casing.
+// snake: Local harness and the PascalCase alias (code.visualstudio.com/docs/agents/reference/hooks-reference,
+// "Common input"): hook_event_name, session_id, tool_name, tool_input, tool_response. camel: Copilot harness
+// camelCase events (docs.github.com/en/copilot/reference/hooks-reference): sessionId, toolName, toolArgs,
+// toolResult {resultType, textResultForLlm}; the documented payload names no event, a live next.6 payload
+// carried hookEventName. No cross-reading of keys between the two.
+const CAMEL_EVENTS: Readonly<Record<string, CanonicalEventName | AuxEventName>> = {
+  sessionStart: "SessionStart", userPromptSubmitted: "UserPromptSubmit", preToolUse: "PreToolUse", postToolUse: "PostToolUse", preCompact: "PreCompact",
+};
+// A camelCase payload with no event name: each event has its own key (GitHub hooks reference payload types).
+const EVENT_BY_KEY: readonly (readonly [string, string])[] = [
+  ["toolResult", "postToolUse"], ["toolName", "preToolUse"], ["prompt", "userPromptSubmitted"], ["source", "sessionStart"], ["trigger", "preCompact"],
+];
+const SESSION_SOURCES: Readonly<Record<string, NonNullable<CanonicalHookEvent["source"]>>> = { new: "startup", startup: "startup", resume: "resume" };
+const RESULT_SUCCESS = "success";
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// toolArgs arrives as an object or as a JSON-encoded string; anything else is {} (same rule as copilot-cli).
+function readArgs(v: unknown): Record<string, unknown> {
+  if (isRecord(v)) return v;
+  if (typeof v !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(v);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function readCamelResult(v: unknown): ToolResultInfo {
+  const r = isRecord(v) ? v : {};
+  const text = typeof r.textResultForLlm === "string" ? r.textResultForLlm : "";
+  return { isError: typeof r.resultType === "string" && r.resultType !== RESULT_SUCCESS, bytes: Buffer.byteLength(text), text };
+}
+
+function decodeCamel(p: Record<string, unknown>, name: unknown): CanonicalHookEvent {
+  const event = typeof name === "string" ? CAMEL_EVENTS[name] ?? VSCODE_EVENTS.find((e) => e === name) : undefined;
+  if (event === undefined) throw new Error("vscode: unknown hook event " + String(name));
+  const ev: CanonicalHookEvent = { event, agent: "vscode", sessionId: String(p.sessionId ?? ""), cwd: String(p.cwd ?? "") };
+  if (event === "SessionStart" && typeof p.source === "string" && SESSION_SOURCES[p.source] !== undefined) ev.source = SESSION_SOURCES[p.source];
+  if (event === "UserPromptSubmit" && typeof p.prompt === "string") ev.prompt = p.prompt;
+  if (event === "PreToolUse" || event === "PostToolUse") {
+    const toolName = String(p.toolName ?? "");
+    ev.tool = { name: toolName, canonicalName: canonicalName(toolName), input: readArgs(p.toolArgs) };
+  }
+  if (event === "PostToolUse") ev.result = readCamelResult(p.toolResult);
+  return ev;
+}
+
 export function decode(raw: unknown): CanonicalHookEvent {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("vscode: hook payload is not a JSON object");
   const p = raw as Record<string, unknown>;
+  if (p.hookEventName !== undefined) return decodeCamel(p, p.hookEventName);
+  if (p.hook_event_name === undefined) {
+    const byKey = EVENT_BY_KEY.find(([key]) => Object.hasOwn(p, key))?.[1];
+    if (byKey === undefined) throw new Error("vscode: missing required field hook_event_name"); // never a silent drop
+    return decodeCamel(p, byKey);
+  }
   const event = VSCODE_EVENTS.find((e) => e === p.hook_event_name);
   if (event === undefined) throw new Error("vscode: unknown hook event " + String(p.hook_event_name));
   // session_id optional. cwd is the common input field (VS Code hooks reference, "Common input"); it is the
@@ -45,7 +103,7 @@ export function decode(raw: unknown): CanonicalHookEvent {
   if (event === "UserPromptSubmit" && typeof p.prompt === "string") ev.prompt = p.prompt;
   if (event === "PreToolUse" || event === "PostToolUse") {
     const name = String(p.tool_name ?? "");
-    const input = typeof p.tool_input === "object" && p.tool_input !== null && !Array.isArray(p.tool_input) ? (p.tool_input as Record<string, unknown>) : {};
+    const input = isRecord(p.tool_input) ? p.tool_input : {};
     ev.tool = { name, canonicalName: canonicalName(name), input };
   }
   if (event === "PostToolUse") ev.result = readResult(p.tool_response);

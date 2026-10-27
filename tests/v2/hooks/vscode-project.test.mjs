@@ -47,3 +47,25 @@ test("H1: a VS Code hook run from a project resolves it from the payload cwd and
   assert.ok(h.permissionDecisionReason.includes("ctx_execute"), h.permissionDecisionReason);
   assert.ok(h.permissionDecisionReason.includes(path.join(repo, "big.log")) || h.permissionDecisionReason.includes("big.log"), h.permissionDecisionReason);
 });
+
+// D-HF-VSCODE-DECODE-1: the camelCase payload with hookEventName that next.6 rejected now reaches the shell rule.
+test("D-HF-VSCODE-DECODE-1: a camelCase hook payload (hookEventName) denies a large shell read like the snake_case one", async () => {
+  const env = { HOME: root, PATH: process.env.PATH };
+  const out = await handleHook("vscode", {
+    hookEventName: "preToolUse", sessionId: "s-vscode-camel", cwd: repo, timestamp: 1790000000000,
+    toolName: "run_in_terminal", toolArgs: { command: "cat big.log" },
+  }, env);
+  assert.equal(out.exitCode, 0);
+  assert.equal(JSON.parse(out.stdout).hookSpecificOutput.permissionDecision, "deny");
+});
+
+test("D-HF-VSCODE-DECODE-1: a payload with no readable event is not silent: allow shape and one decode-failed stderr line", async () => {
+  const lines = [];
+  const orig = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (c) => { lines.push(String(c)); return true; };
+  let out;
+  try { out = await handleHook("vscode", { sessionId: "x", cwd: repo }, { HOME: root, PATH: process.env.PATH }); } finally { process.stderr.write = orig; }
+  assert.deepEqual(out, { stdout: "", exitCode: 0 });
+  assert.equal(lines.length, 1, lines.join("|"));
+  assert.ok(lines[0].startsWith("hooks: decode failed: vscode: missing required field hook_event_name"), lines[0]);
+});
