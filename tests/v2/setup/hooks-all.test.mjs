@@ -364,3 +364,28 @@ test("D-WIN-BOM-1: a BOM kiro hook file and a BOM vscode JSONC config are read, 
   assert.ok(after.startsWith(BOM) && !hasBareLf(after), "BOM and CRLF kept");
   assert.ok(JSON.parse(after.slice(1)).mcpServers.other, "user server kept");
 });
+
+// OC-WIN-1: PowerShell 5 writes opencode.json with a BOM and CRLF. Setup, doctor and remove read it, keep the user's
+// keys, keep BOM + CRLF, and remove restores the original bytes. Runs on every OS: the bytes are built in the test.
+test("OC-WIN-1: opencode setup, doctor and remove read a BOM + CRLF opencode.json and keep its layout", async (t) => {
+  const s = sandbox(t);
+  const file = path.join(s.home, ".config", "opencode", "opencode.json");
+  mkdirSync(path.dirname(file), { recursive: true });
+  const user = BOM + toCrlf(JSON.stringify({ theme: "dark", plugin: ["my-own-plugin"] }, null, 2) + "\n");
+  writeFileSync(file, user);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["opencode"], runId: "a" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  const after = readFileSync(file, "utf8");
+  assert.ok(after.startsWith(BOM) && !after.slice(1).includes(BOM), "one BOM kept");
+  assert.ok(!hasBareLf(after), "CRLF kept");
+  const doc = JSON.parse(after.slice(1));
+  assert.equal(doc.theme, "dark", "user key kept");
+  assert.ok(doc.plugin.includes("my-own-plugin"), "user plugin kept");
+  assert.ok(doc.plugin.includes(path.join(s.pkgDir, "opencode", "plugin.js")), "our plugin entry added");
+  const { runDoctor } = await import("../../../src/setup/index.ts");
+  const d = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["opencode"] });
+  assert.equal(d.agents[0].status, "PASS", JSON.stringify(d.agents[0]));
+  assert.equal(d.agents[0].checks.find((c) => c.name === "parse")?.ok, true, "doctor parses the BOM file");
+  assert.equal(runRemove({ home: s.home, env: s.env }).exitCode, 0);
+  assert.equal(readFileSync(file, "utf8"), user, "remove restores the original bytes");
+});

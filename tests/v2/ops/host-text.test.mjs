@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { hostLayout, hostText, withLayout } from "../../../src/core/ops/host-text.ts";
-import { readHostConfig, writeHostConfigEdit } from "../../../src/core/ops/host-config.ts";
+import { parseHostConfig, readHostConfig, writeHostConfigEdit } from "../../../src/core/ops/host-config.ts";
 import { detectV1 } from "../../../src/core/ops/detect-v1.ts";
 import { removeV1 } from "../../../src/core/ops/v1-remove.ts";
 import { readUserDeny } from "../../../src/core/policy/user-deny.ts";
@@ -45,6 +45,19 @@ test("host-text: readHostConfig strips a BOM and CRLF; writeHostConfigEdit keeps
   assert.equal(out.charCodeAt(0), 0xfeff);
   assert.equal(out.split("\r\n").join("").includes("\n"), false, "every line end is CRLF");
   assert.deepEqual(JSON.parse(out.slice(1)), { model: "x", extra: 1 });
+});
+
+test("host-text: readHostConfig reads a BOM + CRLF opencode.json and a BOM opencode.jsonc sibling (OC-WIN-1)", (t) => {
+  const dir = tmp(t);
+  const json = path.join(dir, "opencode.json");
+  writeFileSync(json, BOM + '{\r\n  "theme": "dark"\r\n}\r\n', "utf8");
+  const a = readHostConfig("opencode", json);
+  assert.equal(a.text.charCodeAt(0), 0x7b, "BOM off");
+  assert.deepEqual(parseHostConfig("opencode", a.path, a.text, a.format), { theme: "dark" });
+  writeFileSync(path.join(dir, "opencode.jsonc"), BOM + '{\r\n  // c\r\n  "theme": "light",\r\n}\r\n', "utf8");
+  const b = readHostConfig("opencode", json);
+  assert.equal(b.format, "jsonc");
+  assert.deepEqual(parseHostConfig("opencode", b.path, b.text, b.format), { theme: "light" });
 });
 
 test("host-text: detectV1 sees a v1 hook in a settings.json that starts with a BOM", (t) => {
