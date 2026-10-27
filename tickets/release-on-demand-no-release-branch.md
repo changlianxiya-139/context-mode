@@ -17,3 +17,14 @@ Status: decided by the owner, 2026-10-26. Not started.
    - `gh release create` gets `--prerelease` while the version has `-next`.
 4. When v2 is `latest`: delete the `release` branch on origin.
 5. If the probe fails: keep the branch for the Claude Code marketplace only; everything else still moves to npm.
+
+## Update 2026-10-27: follow what popular OSS plugins do (owner decision)
+Checked on GitHub, each repo's `.claude-plugin/marketplace.json`:
+- vercel/vercel-plugin: on `main`, `source: "./"`. Built hook `.mjs` files are in the repo on `main` (tsup output next to `hooks/src`).
+- upstash/context7: on `master`, `source: "./plugins/claude/context7"` (a plugin subfolder).
+- TanStack/ai, vercel-labs/agent-browser, supabase/agent-skills, cloudflare/skills: on `main`, `source: "./"`.
+- oven-sh (Bun): no Claude Code marketplace found.
+None of them uses a separate release branch.
+
+Decision: when v2 is on `main`, the Claude Code marketplace lives on `main` and points at a plugin subfolder (context7 style, e.g. `./plugins/claude-code`) that holds the built files. The release workflow writes that folder in the release commit, so `main` serves the last released build. Users run `/plugin marketplace add mksglu/context-mode` and `/plugin install context-mode@context-mode` (native). The `release` branch is removed then.
+Until v2 is on `main`, `release` stays as the temporary source for testing `next` (`/plugin marketplace add mksglu/context-mode#release`).
