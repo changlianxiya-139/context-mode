@@ -7,13 +7,14 @@
 //     top-level keys are rewritten (writeHostConfigEdit), so other keys and their comments are kept.
 // Every edited config keeps its original at <file>UPGRADE_TRASH_SUFFIX until commit(); rollback() puts
 // every removed path and every original config back. No regex: key paths split on V1_KEY_PATH_SEP.
-import { copyFileSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { AgentId } from "../contracts/agents.ts";
 import type { UpgradeChangeRow, V1Finding } from "../contracts/types.ts";
 import {
-  HOST_CONFIG_TMP_SUFFIX, TOML_EXT, TOML_TABLE_OPEN, UPGRADE_AREA_KEY_SEP, UPGRADE_NOT_FOUND, UPGRADE_REMOVED,
+  TOML_EXT, TOML_TABLE_OPEN, UPGRADE_AREA_KEY_SEP, UPGRADE_NOT_FOUND, UPGRADE_REMOVED,
   UPGRADE_REPORT_ONLY, UPGRADE_REPORT_ONLY_REASONS, UPGRADE_TRASH_SUFFIX, V1_KEY_PATH_SEP,
 } from "../contracts/constants.ts";
+import { atomicWriteFile, renameWithRetry } from "./atomic-file.ts";
 import { parseHostConfig, writeHostConfigEdit } from "./host-config.ts";
 
 type Obj = Record<string, unknown>;
@@ -36,7 +37,7 @@ const row = (f: V1Finding, after: string): UpgradeChangeRow => ({ area: areaOf(f
 function moveAside(target: string, undo: Undo[]): void {
   const trash = target + UPGRADE_TRASH_SUFFIX;
   rmSync(trash, { recursive: true, force: true });
-  renameSync(target, trash);
+  renameWithRetry(target, trash);
   undo.push({ trash, target });
 }
 
@@ -61,9 +62,7 @@ function cutTomlTable(text: string, header: string): string | null {
 }
 
 function writeAtomic(file: string, text: string): void {
-  const tmp = file + HOST_CONFIG_TMP_SUFFIX;
-  writeFileSync(tmp, text, "utf8");
-  renameSync(tmp, file);
+  atomicWriteFile(file, text);
 }
 
 /** Resolve a dotted key path to [container, key]; null when any step is missing. */
@@ -154,7 +153,7 @@ export function removeV1(agent: AgentId, findings: readonly V1Finding[]): V1Remo
       for (const u of undo.splice(0).reverse()) {
         if (!existsSync(u.trash)) continue;
         rmSync(u.target, { recursive: true, force: true });
-        renameSync(u.trash, u.target);
+        renameWithRetry(u.trash, u.target);
       }
     },
   };

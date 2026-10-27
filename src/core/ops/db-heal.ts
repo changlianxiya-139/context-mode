@@ -2,7 +2,7 @@
 // Runs only after D8's integrity_check sub-check failed. Sole live owner -> healLossless; else, or if
 // healLossless throws -> rename context.db, -wal, -shm aside as <file>.<ts>.bak and recreate via openDb.
 // All file steps are synchronous: no other code of this process runs between the copy and the swap.
-import { existsSync, renameSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import {
   D8_HEALED_LOSSLESS_DETAIL,
   D8_HEALED_RECREATE_DETAIL,
@@ -18,6 +18,7 @@ import {
   SQLITE_MODULE,
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
+import { renameWithRetry } from "./atomic-file.ts";
 import type { DoctorRow, ProjectContext } from "../contracts/types.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { listLiveOwners } from "../store/owners.ts";
@@ -60,7 +61,7 @@ export async function healLossless(dbPath: string): Promise<void> {
     }
     rmSync(dbPath + DB_WAL_SUFFIX, { force: true });
     rmSync(dbPath + DB_SHM_SUFFIX, { force: true });
-    renameSync(tmp, dbPath);
+    renameWithRetry(tmp, dbPath);
   } finally {
     rmSync(tmp, { force: true });
   }
@@ -71,7 +72,7 @@ function renameAside(dbPath: string): string {
   const ts = String(Date.now());
   for (const suffix of DB_SIBLING_SUFFIXES) {
     const file = dbPath + suffix;
-    if (existsSync(file)) renameSync(file, file + HEAL_TS_SEP + ts + HEAL_BACKUP_SUFFIX);
+    if (existsSync(file)) renameWithRetry(file, file + HEAL_TS_SEP + ts + HEAL_BACKUP_SUFFIX);
   }
   return ts;
 }

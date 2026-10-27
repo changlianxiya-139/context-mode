@@ -631,6 +631,12 @@ export const SERVER_ENTRY_FILE = "server.mjs"; // the MCP server bundle next to 
 export const HOST_NODE_COMMAND = "node"; // MCP entry `command`
 export const EXE_SUFFIX = ".exe"; // Windows node: "C:\\Program Files\\nodejs\\node.exe" (D-VT-DOCTOR-CMD-1)
 export const HOST_CONFIG_TMP_SUFFIX = ".tmp"; // write <file>.tmp, then rename over <file>
+// ops/atomic-file.ts, DEVIATIONS D-WIN-ATOMIC-1: Windows refuses a rename over a file another process holds open.
+export const ATOMIC_RENAME_RETRIES = 5; // retries after the first failed rename (6 tries in all)
+export const ATOMIC_RENAME_DELAY_MS = 50; // wait between tries
+export const ATOMIC_RENAME_BUSY_CODES: readonly string[] = ["EPERM", "EBUSY", "EACCES"]; // Windows "file in use" codes
+export const ATOMIC_TMP_PREFIX = ".";
+export const ATOMIC_TMP_MARK = ".cm-tmp-"; // <dir>/.<name>.cm-tmp-<pid>
 export const HOST_CONFIG_TEXT_PATH = "(given text)"; // CONFIG_PARSE_FAILED <path> when mergeOwnEntries parses text with no file
 export const JSON_INDENT_UNIT = "  "; // indent for a file with no indented member to copy from
 export const MCP_COMMAND_FIELD = "command";

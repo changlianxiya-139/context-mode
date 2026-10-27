@@ -2,14 +2,15 @@
 // #849 .jsonc wins, #808 string-aware comment strip), TECH-SPEC §3.11; DEVIATIONS D-M5-O1-1..4.
 // No regex: every parse below is a character scanner. JSON/JSONC edits touch only the edited value span,
 // so comments and untouched text survive byte for byte.
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  AGENT_ARG, HOST_CONFIG_TEXT_PATH, HOST_CONFIG_TMP_SUFFIX, HOST_NODE_COMMAND, JSON_INDENT_UNIT, JSONC_EXT,
+  AGENT_ARG, HOST_CONFIG_TEXT_PATH, HOST_NODE_COMMAND, JSON_INDENT_UNIT, JSONC_EXT,
   MCP_ARGS_FIELD, MCP_COMMAND_FIELD, OPENCODE_CONFIG_FILES, OPENCODE_GIT_SPEC, OPENCODE_PLUGIN_KEY, OWN_MCP_ENTRY,
   PI_GIT_PACKAGE, PI_PACKAGES_KEY, SERVER_ENTRY_FILE, TOML_EXT, V1_OPENCODE_PLUGIN_SPEC, V1_PI_PACKAGE,
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
+import { atomicWriteFile } from "./atomic-file.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, HostConfigFormat, HostConfigResult } from "../contracts/types.ts";
 
 export interface HostConfigText { agent: AgentId; text: string; format: HostConfigFormat; path: string; }
@@ -522,8 +523,6 @@ export function writeHostConfigEdit(_requested: string, current: HostConfigText,
   const wanted = Object.entries(patch).map(([k, v]): [KeyPath, unknown] => [[k], v]);
   const result = applyEdits(current.agent, current.path, current.text, current.format, wanted);
   if (result.edits.length === 0) return [];
-  const tmp = current.path + HOST_CONFIG_TMP_SUFFIX;
-  writeFileSync(tmp, result.text, "utf8");
-  renameSync(tmp, current.path);
+  atomicWriteFile(current.path, result.text);
   return result.edits;
 }

@@ -1,13 +1,14 @@
 // impl/07 §6 step 5 (config regeneration), §2 (readHostConfig, mergeOwnEntries, #849 .jsonc pick);
 // DEVIATIONS D-M5-O1-3, D-M5-O1-4, D-M5-U1-6, D-M5-U5-1. One write path: copy the original to
 // <file>UPGRADE_TRASH_SUFFIX, write <file>.tmp, rename over <file>; any failure puts the original back.
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   AGENT_HOME_DIR, HOST_CONFIG_TMP_SUFFIX, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, PI_AGENT_DIR, PI_AGENT_DIR_ENV,
   SETTINGS_FILE, UPGRADE_AREA_KEY_SEP, UPGRADE_TRASH_SUFFIX,
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
+import { renameWithRetry } from "./atomic-file.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 
 /** Writes `text` to `file`. Injected only by tests to force a failure mid-write (GP11 rollback). */
@@ -51,10 +52,10 @@ function writeWithRollback(file: string, text: string, write: HostFileWriter): v
   if (had) copyFileSync(file, trash);
   try {
     write(tmp, text);
-    renameSync(tmp, file);
+    renameWithRetry(tmp, file);
   } catch (err) {
     rmSync(tmp, { force: true });
-    if (had) renameSync(trash, file);
+    if (had) renameWithRetry(trash, file);
     else rmSync(file, { force: true });
     throw err;
   }

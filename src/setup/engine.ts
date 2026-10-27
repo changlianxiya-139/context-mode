@@ -3,7 +3,7 @@
 // Owner decisions D3 (hook overhead budget) and D4 (v1 forms replaced by the absolute form).
 import { CODEX_TRUST_PATH, codexTrustEntries } from "./codex-trust.ts";
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -11,6 +11,7 @@ import { AGENT_HOME_DIR, DB_FILE_NAME, PROJECTS_DIR_NAME, TOOL_ORDER, UPGRADE_RE
 import { CtxError } from "../core/contracts/errors.ts";
 import type { AgentId, V1Finding } from "../core/contracts/types.ts";
 import { detectV1 } from "../core/ops/detect-v1.ts";
+import { atomicWriteFile, renameWithRetry } from "../core/ops/atomic-file.ts";
 import { editHostConfigText } from "../core/ops/host-config.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
 import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
@@ -109,12 +110,7 @@ function runBin(bin: string, args: string[], env: SetupContext["env"], input?: s
 
 function readOr(file: string): string | undefined { return existsSync(file) ? readFileSync(file, "utf8") : undefined; }
 
-function atomicWrite(file: string, text: string): void {
-  mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.cm-tmp-${process.pid}`);
-  writeFileSync(tmp, text);
-  renameSync(tmp, file);
-}
+const atomicWrite = atomicWriteFile; // D-WIN-ATOMIC-1: retries a Windows "file in use" rename, removes its tmp file on failure
 
 function pidAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
@@ -750,7 +746,7 @@ export function runRemove(opts: { home: string; env?: SetupContext["env"] }): { 
       const m = JSON.parse(readFileSync(path.join(dir, MANIFEST), "utf8")) as Manifest;
       undo(dir, m.entries, env);
       restored += m.entries.length;
-      renameSync(path.join(dir, MANIFEST), path.join(dir, MANIFEST_DONE));
+      renameWithRetry(path.join(dir, MANIFEST), path.join(dir, MANIFEST_DONE));
     }
   } finally { rmSync(path.join(root, LOCK_FILE), { force: true }); }
   return { exitCode: 0, restored };
