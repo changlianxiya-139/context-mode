@@ -3,21 +3,30 @@
 ## Install
 
 ```sh
-npm i -g context-mode@next
+gemini extensions install https://github.com/mksglu/context-mode
+```
+
+Update:
+
+```sh
+gemini extensions update context-mode
+```
+
+Check: `context-mode doctor`
+
+Gemini CLI asks you to confirm the install. Restart Gemini CLI after the install and after each update.
+
+`next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
+Setup is the fallback and the repair for what the native step cannot do:
+
+```sh
 context-mode setup --agents gemini
 ```
 
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents gemini`. Without it, setup stops with exit 2.
 
-Restart Gemini CLI after setup.
-
-Prefer to do it by hand? Run `context-mode setup --print gemini` and follow what it prints.
-
-Gemini CLI can also install the extension from git, from the `release` branch. It updates by itself:
-
-```sh
-gemini extensions install https://github.com/mksglu/context-mode --ref release --consent
-```
+To do the setup step by hand, run `context-mode setup --print gemini` and follow what it prints.
 
 ## What setup changes
 
