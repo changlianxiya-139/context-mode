@@ -4,13 +4,9 @@ Checked 2026-10-27 with `npm view context-mode dist-tags`.
 
 ## npm version on next
 
-There is no `next` tag. The command shows only `latest: 1.0.169`.
-2.0.0-next.5 did not publish. Its release run failed in the ci gate (see "Still open").
-Nothing from v2 is on npm now. `latest` is still 1.0.169.
+`next` is 2.0.0-next.5 (tag v2.0.0-next.5, commit 0bf57342). `latest` is still 1.0.169.
 
 ## How to test it
-
-Once a next version is published, run:
 
 ```sh
 npm i -g context-mode@next
@@ -18,34 +14,42 @@ context-mode setup
 context-mode doctor
 ```
 
-Until then, build from a clone: see "From source" in `docs/install/README.md`.
-
 ## Per agent
 
-Method: doc-verified. No run used a logged-in model session. Each run piped the documented host payload into the installed hook or plugin. Date 2026-10-26.
-Data: `docs/benchmarks/hooks-saving/results.json`. Detail: `docs/install/README.md`.
+This run tested the next.5 package on each agent. Only Codex had a live model turn. Claude Code had no login in a fresh config dir, so its live arms did not run.
 Bytes are one large tool result (about 200 KB log): without context-mode -> with v2.
 
 | Agent | Pass | Live or doc-verified | Bytes off -> v2 | Problems |
 |---|---|---|---|---|
-| Claude Code | yes | doc-verified (host 2.1.309) | 196,149 -> 286 | none |
-| Codex | yes | doc-verified, partly (host 0.164.0) | 217,858 -> 392 | docs page has no skills directory |
-| Gemini CLI | yes | doc-verified, partly (host 0.65.0) | 168,875 -> 343 | deny text names `ctx_search`, host name is `mcp_context-mode_ctx_search` |
-| Qwen Code | yes | doc-verified, partly (host 0.26.1) | 212,544 -> 332 | no headless hook list |
-| Copilot CLI | yes | doc-verified, partly (host 1.0.103) | 203,669 -> 384 | MCP tool-name prefix not checked |
-| VS Code (Copilot) | yes | doc-verified, partly (not run) | 204,513 -> 560 | no loader run |
-| Kiro | yes | doc-verified, partly (not installed) | 183,551 -> 242 | stdin payload from adapter, not docs |
-| ZCode | yes | doc-verified, partly (not installed) | 169,068 -> 443 | skills dir not in docs |
-| Pi | yes | doc-verified (host 0.73.1) | 200,062 -> 160 | none |
-| OpenCode | yes | doc-verified, partly (not installed) | 198,645 -> 235 | plugin tool name unproven live |
+| Claude Code | no | not run (no login) | none | Live arms did not run. doctor WARN: hook-seen not seen yet. |
+| Codex | no | live | 16,616 -> 11,827 | v2 is not under half of off. The tool discovery dump (10,730 B) is the cost. Setup ignored CODEX_HOME (fixed, see below). |
+| Gemini CLI | no | doc-verified | 191,795 -> 145 | Answer not proven without a live model. The deny reason search query is the raw command text. |
+| Qwen Code | no | doc-verified | 215,118 -> 302 | Setup skips when qwen is not on PATH, so it does not run the native install. Skill tool name was doubled (fixed). |
+| Copilot CLI | no | doc-verified | 185,768 -> 248 | No live turn. Tool name forms in skills and deny reason differ. Real name not checked. |
+| VS Code (Copilot) | yes | doc-verified | 200,101 -> 358 (estimate) | No live session. hook-seen stays WARN. |
+| Kiro | no | doc-verified | 219,322 -> 188 | No Kiro CLI. Docs lack the tool_response shape. Answer not proven. |
+| ZCode | no | doc-verified | 192,625 -> 300 | No zcode CLI. Skill tool name was doubled (fixed). Deny reason name must be checked again. |
+| Pi | yes | doc-verified | 185,813 -> 177 | No live model. Extension handlers ran in-process. |
+| OpenCode | no | doc-verified | 194,935 -> 175 | opencode not installed. hook-seen WARN. |
 
-Claude Code A/B (live, `docs/v2/benchmarks.md`): median tool_result bytes on large tasks off 4,694.5, v2 734.5. 12 of 12 pass per arm.
+## Fixes pushed after next.5
 
-## Still open
+They ship in the next tag.
 
-- Publish. The next.5 release run 40496186557 failed in the ci gate on ubuntu node 26. GP-SEARCH/heldout search p95 was 50.5 ms, budget 50 ms. Same commit 0bf57342 passed ci.yml run 40494937709. It looks like runner noise. No budget was raised. Next step: push tag v2.0.0-next.6 on a green head, or re-run the failed job.
-- The next.4 failure (E422, no `repository` key) is fixed in 496670bf and 0bf57342 (D-RN-REPO-1).
-- Live runs with a logged-in model session do not exist for 9 agents.
-- Hosts not installed: VS Code (not run), Kiro, ZCode, OpenCode.
-- Claude Code needs `context-mode upgrade` after an npm update (see `UPGRADE-CHECK.md`).
-- Claude Code A/B: json-1 tokens in v2 stay above off.
+- D-RN-ORDER-1: the GitHub release is made only after npm publish works. `--promote` makes no release. New mode `--github-release`.
+- D-HQ-PERF-2: typo correction reads `chunks_vocab` once per pass. Search profile: full loop p50 4.64 ms, within host noise. Budget stays 50 ms.
+- D-N5-SKILL-1: setup builds home-dir skills from the bare-name skill dir. No doubled tool prefix (codex, qwen, copilot-cli, vscode, kiro, zcode, opencode).
+- D-N5-CODEX-HOME-1: setup writes the codex config, hooks and skills under CODEX_HOME when set.
+
+Check after these fixes: `node --test tests/v2/` 1644 pass, 0 fail, 5 skip. `gate --all --quick` exit 0.
+
+## Open items
+
+- GitHub prerelease v2.0.0-next.4 has no npm package.
+- Claude Code live run needs a credential step for the fresh config dir.
+- Codex token saving is below the target because of the tool catalogue search.
+- Gemini deny reason: with a prompt in the session the FATAL line is in the reason. With no prompt, only the last log line is. Search query text still needs a check.
+- Setup skips qwen when it is not installed. It should use the native install.
+- Tool-name forms for Copilot CLI and ZCode are not verified on a real host.
+- Hosts not installed: Kiro, ZCode, OpenCode, VS Code (not run).
+- Live runs with a logged-in model session are missing for 9 agents.
