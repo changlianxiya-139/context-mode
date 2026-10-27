@@ -4,7 +4,7 @@
 import path from "node:path";
 
 import { ADAPTERS, getAdapter } from "../adapters/table.ts";
-import { OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
+import { HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
 import type { AgentId, AdapterRow, HostConfigFormat } from "../core/contracts/types.ts";
 import { HOOK_SHAPES, type JsonObject } from "./hook-shapes.ts";
 
@@ -76,6 +76,8 @@ function skillDirPrefixes(dirPath: string): string[] {
   return out;
 }
 
+export interface HostCopy { host: string; bin: string; plugin: string; file: string; refresh: string[]; }
+
 export interface CliPlan { bin: string; install: string[][]; remove: string[][]; input?: string; }
 
 export interface CheckRow {
@@ -86,6 +88,8 @@ export interface CheckRow {
   config?: ConfigTarget;
   cli?: CliPlan;
   listCommand?: { bin: string; args: string[] };
+  /** D-US-1: the host runs a copy of the package; `file` records the copied version, `refresh` (run with `bin`) renews it. */
+  copy?: HostCopy;
   hookFiles: HookFile[];
   hookInstall: HookInstall;
   skillInstall: SkillInstall;
@@ -152,6 +156,14 @@ function cliFor(ctx: SetupContext, id: AgentId): CliPlan | undefined {
     case "pi": return { bin: "pi", install: [["install", ctx.pkgDir]], remove: [["remove", ctx.pkgDir]] };
     default: return undefined;
   }
+}
+
+/** D-US-1: Claude Code copies the plugin to ~/.claude/plugins/cache/<marketplace>/context-mode/<version> and records the
+ *  version in installed_plugins.json; npm i -g does not touch that copy, `claude plugin update` renews it. */
+function copyFor(ctx: SetupContext, id: AgentId): HostCopy | undefined {
+  if (id !== "claude-code") return undefined;
+  const file = path.join(ctx.home, HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE);
+  return { host: "Claude Code", bin: "claude", plugin: PLUGIN_ID, file, refresh: ["plugin", "update", PLUGIN_ID] };
 }
 
 const LIST: Partial<Record<AgentId, { bin: string; args: string[] }>> = {
@@ -223,6 +235,8 @@ export function buildRegistry(ctx: SetupContext): CheckRow[] {
       goldenPayload: golden(row, ctx.home),
     };
     if (row.installMode !== "in-process") out.hookCommand = hookCommand;
+    const copy = copyFor(ctx, id);
+    if (copy) out.copy = copy;
     return out;
   });
 }

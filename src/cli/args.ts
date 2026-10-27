@@ -11,7 +11,7 @@ export const AGENT_IDS: readonly AgentId[] = ADAPTERS.map((a) => a.id);
 export interface Flags {
   help: boolean; json: boolean; yes: boolean; noInput: boolean; dryRun: boolean; debug: boolean;
   quiet: boolean; verbose: boolean; noColor: boolean; list: boolean; remove: boolean; repair: boolean;
-  agents?: AgentId[]; tag: string; print?: AgentId;
+  agents?: AgentId[]; tag?: string; print?: AgentId;
 }
 
 const COMMON = ["--help", "-h", "--json", "--yes", "-y", "--no-input", "--debug", "--quiet", "-q", "--verbose", "--no-color", "--agents"];
@@ -51,7 +51,7 @@ export function suggest(word: string, candidates: readonly string[]): string {
 }
 
 export function parseFlags(cmd: Command, argv: readonly string[]): Flags {
-  const f: Flags = { help: false, json: false, yes: false, noInput: false, dryRun: false, debug: false, quiet: false, verbose: false, noColor: false, list: false, remove: false, repair: false, tag: "latest" };
+  const f: Flags = { help: false, json: false, yes: false, noInput: false, dryRun: false, debug: false, quiet: false, verbose: false, noColor: false, list: false, remove: false, repair: false };
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i];
     const eq = raw.startsWith("--") ? raw.indexOf("=") : -1;
@@ -181,7 +181,7 @@ Examples:
 Run npm i -g context-mode@<tag>, then the new version runs context-mode setup --repair.
 
 Options:
-  --tag <tag>        npm dist-tag or version to install (default: latest)
+  --tag <tag>        npm dist-tag or version to install (default: the dist-tag of this version)
   --dry-run          Print the commands; run nothing
 ${COMMON_HELP}
 ${EXIT_CODES}
