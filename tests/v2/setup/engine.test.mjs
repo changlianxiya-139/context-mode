@@ -396,9 +396,15 @@ test("winCmdLine: a % that names no variable passes, and every other metacharact
 
 test("spawnForm: a Windows shim line with an expandable %NAME% throws; .exe and other platforms are not affected (D-WIN-CMDPCT-1)", () => {
   assert.throws(() => spawnForm("C:\\n p\\gemini.cmd", ["x", "%APPDATA%"], { APPDATA: "C:\\a" }, "win32"), /cmd\.exe expands %APPDATA%/);
-  assert.deepEqual(spawnForm("C:\\n p\\gemini.cmd", ["file:///a%20b"], {}, "win32").args, ["/d", "/s", "/c", '""C:\\n p\\gemini.cmd" file:///a%20b"']);
+  assert.deepEqual(spawnForm("C:\\n p\\gemini.cmd", ["file:///a%20b"], {}, "win32").args, ["/d", "/v:off", "/s", "/c", '""C:\\n p\\gemini.cmd" file:///a%20b"']);
   assert.deepEqual(spawnForm("C:\\n p\\claude.exe", ["%APPDATA%"], { APPDATA: "x" }, "win32").args, ["%APPDATA%"]);
   assert.deepEqual(spawnForm("/usr/bin/codex.cmd", ["%HOME%"], { HOME: "/h" }, "linux").args, ["%HOME%"]);
+});
+
+test("spawnForm: cmd.exe runs with /v:off so a registry DelayedExpansion setting cannot expand ! in a quoted argument (D-WIN-CMDBANG-1)", () => {
+  const f = spawnForm("C:\\n p\\gemini.cmd", ["extensions", "link", "C:\\a!b\\pkg"], {}, "win32");
+  assert.deepEqual(f.args.slice(0, 4), ["/d", "/v:off", "/s", "/c"], "/c stays the last switch");
+  assert.ok(f.args[4].includes("a!b"), "the ! is kept as text");
 });
 
 test("spawnShim: a refused % argument is a failed step with the reason, not a throw and not a run (D-WIN-CMDPCT-1)", () => {
@@ -418,10 +424,10 @@ test("spawnShim: a clean command runs and returns the spawnSync result (D-WIN-CM
 
 // D-RN-WIN-1: release smoke spawned `codex` by bare name on Windows and got ENOENT (npm puts only codex.cmd/.ps1 on
 // PATH). setup and smoke now share one spawn form: a .cmd/.bat shim runs through cmd.exe /d /s /c, any other file as is.
-test("spawnForm: a Windows .cmd/.bat shim runs through cmd.exe /d /s /c; any other file runs as is (D-RN-WIN-1)", () => {
+test("spawnForm: a Windows .cmd/.bat shim runs through cmd.exe /d /v:off /s /c; any other file runs as is (D-RN-WIN-1)", () => {
   const comspec = "C:\\Windows\\system32\\cmd.exe";
   assert.deepEqual(spawnForm("C:\\n p\\codex.cmd", ["mcp", "list", "--json"], { ComSpec: comspec }, "win32"),
-    { command: comspec, args: ["/d", "/s", "/c", '""C:\\n p\\codex.cmd" mcp list --json"'], windowsVerbatimArguments: true });
+    { command: comspec, args: ["/d", "/v:off", "/s", "/c", '""C:\\n p\\codex.cmd" mcp list --json"'], windowsVerbatimArguments: true });
   assert.deepEqual(spawnForm("C:\\x\\GEMINI.BAT", ["a"], { COMSPEC: comspec }, "win32").command, comspec, "extension and env key in any case");
   assert.equal(spawnForm("C:\\x\\q.cmd", [], {}, "win32").command, "cmd.exe", "no ComSpec: cmd.exe from PATH");
   assert.deepEqual(spawnForm("C:\\x\\claude.exe", ["a"], {}, "win32"), { command: "C:\\x\\claude.exe", args: ["a"], windowsVerbatimArguments: false });
@@ -438,10 +444,10 @@ test("spawnForm: on Windows an npm-style .cmd shim in a dir with a space runs an
   const env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== "PATH")), PATH: dir };
   const file = whichBin("echo-args", env);
   assert.equal(file, path.join(dir, "echo-args.cmd"));
-  const f = spawnForm(file, ["mcp", "list", "--json", "a b"], env);
+  const f = spawnForm(file, ["mcp", "list", "--json", "a b", "x!PATH!y"], env);
   const r = spawnSync(f.command, f.args, { env, encoding: "utf8", windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
   assert.equal(r.status, 0, `${r.error ?? ""} ${r.stderr}`);
-  assert.deepEqual(JSON.parse(r.stdout), ["mcp", "list", "--json", "a b"]);
+  assert.deepEqual(JSON.parse(r.stdout), ["mcp", "list", "--json", "a b", "x!PATH!y"], "a ! argument reaches the shim as text (D-WIN-CMDBANG-1)");
 });
 
 test("spawnForm: on Windows real cmd.exe leaves a %7E/%20 URL argument as typed, and a %TEMP% argument is refused (D-WIN-CMDPCT-1)", { skip: process.platform !== "win32" && "cmd.exe is Windows only" }, (t) => {

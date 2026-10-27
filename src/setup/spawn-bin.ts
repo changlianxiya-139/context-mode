@@ -78,11 +78,12 @@ export function winCmdLine(file: string, args: string[], env: Env = {}): string 
 
 export interface SpawnForm { command: string; args: string[]; windowsVerbatimArguments: boolean; }
 
-/** How to spawn `file args`. On Windows a .cmd/.bat shim runs through `%ComSpec% /d /s /c "<line>"` with verbatim
- *  arguments (the documented way since CVE-2024-27980); any other file, and every file elsewhere, runs as is. */
+/** How to spawn `file args`. On Windows a .cmd/.bat shim runs through `%ComSpec% /d /v:off /s /c "<line>"` with verbatim
+ *  arguments (the documented way since CVE-2024-27980); any other file, and every file elsewhere, runs as is. /v:off
+ *  overrides a DelayedExpansion registry setting, so a `!` in a quoted argument stays text (D-WIN-CMDBANG-1). */
 export function spawnForm(file: string, args: string[], env: Env, platform: NodeJS.Platform = process.platform): SpawnForm {
   if (platform === "win32" && WIN_SHIM_EXTS.includes(path.extname(file).toLowerCase())) {
-    return { command: envGet(env, "COMSPEC") || DEFAULT_COMSPEC, args: ["/d", "/s", "/c", winCmdLine(file, args, env)], windowsVerbatimArguments: true };
+    return { command: envGet(env, "COMSPEC") || DEFAULT_COMSPEC, args: ["/d", "/v:off", "/s", "/c", winCmdLine(file, args, env)], windowsVerbatimArguments: true };
   }
   return { command: file, args, windowsVerbatimArguments: false };
 }

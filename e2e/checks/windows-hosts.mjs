@@ -17,6 +17,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readd
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnForm } from "../../src/setup/spawn-bin.ts"; // one spawn form for setup, smoke and this matrix (D-WIN-CMDBANG-1)
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WIN = process.platform === "win32";
@@ -65,16 +66,8 @@ const tail = (s, n = 500) => `${s ?? ""}`.trim().slice(-n);
 
 // ---------- process helpers ----------
 
-const q = (a) => (a === "" || /[\s"&|<>^()%!]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
-/** Run a file the way a script runs a tool: a Windows .cmd shim goes through cmd.exe /d /s /c with verbatim args. */
-function form(file, args) {
-  if (WIN && /\.(cmd|bat)$/i.test(file)) {
-    return { command: process.env.ComSpec || "cmd.exe", args: ["/d", "/s", "/c", `"${[file, ...args].map(q).join(" ")}"`], windowsVerbatimArguments: true };
-  }
-  return { command: file, args, windowsVerbatimArguments: false };
-}
 function run(file, args, { env, cwd, input, timeout = STEP_TIMEOUT_MS } = {}) {
-  const f = form(file, args);
+  const f = spawnForm(file, args, env ?? process.env);
   const r = spawnSync(f.command, f.args, { env, cwd, input, encoding: "utf8", timeout, windowsHide: true, windowsVerbatimArguments: f.windowsVerbatimArguments, maxBuffer: 64 * 1024 * 1024 });
   return { status: r.status, signal: r.signal, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message };
 }
