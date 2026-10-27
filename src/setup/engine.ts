@@ -17,8 +17,8 @@ import { editHostConfigText } from "../core/ops/host-config.ts";
 import { hostLayout, hostText, withLayout } from "../core/ops/host-text.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
 import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
-import { pathEntries, spawnForm, whichBin, winCmdLine } from "./spawn-bin.ts";
-export { spawnForm, whichBin, winCmdLine };
+import { pathEntries, spawnForm, spawnShim, whichBin, winCmdLine } from "./spawn-bin.ts";
+export { spawnForm, spawnShim, whichBin, winCmdLine };
 import { SAMPLE_FILE, hookSample, sampleText, sampleVerdict } from "./hook-sample.ts";
 
 export const OVERHEAD_P95_MS = 15; // D3: hook wall minus bare node wall, p95, same host and run
@@ -106,8 +106,7 @@ export function hostBin(bin: string, env: SetupContext["env"], platform: NodeJS.
 
 /** Runs an agent CLI found on PATH; a Windows .cmd/.bat shim goes through cmd.exe (spawnForm). */
 function runBin(bin: string, args: string[], env: SetupContext["env"], input?: string): ReturnType<typeof spawnSync> {
-  const f = spawnForm(hostBin(bin, env).file ?? bin, args, env);
-  return spawnSync(f.command, f.args, { env, encoding: "utf8", input, timeout: VERIFY_TIMEOUT_MS, windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
+  return spawnShim(hostBin(bin, env).file ?? bin, args, env, { encoding: "utf8", input, timeout: VERIFY_TIMEOUT_MS }) as ReturnType<typeof spawnSync>;
 }
 
 /** CC-WIN-3: host file text as plain LF without a BOM (PowerShell 5 writes both); apply gives the layout back. */

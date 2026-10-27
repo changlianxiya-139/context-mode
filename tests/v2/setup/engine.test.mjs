@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { ADAPTERS } from "../../../src/adapters/table.ts";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
-import { assertWritable, buildRegistry, hostBin, pathEntries, runDoctor, runRemove, runSetup, spawnForm, whichBin, winCmdLine, LOCK_FILE, BACKUP_DIR } from "../../../src/setup/index.ts";
+import { assertWritable, buildRegistry, hostBin, pathEntries, runDoctor, runRemove, runSetup, spawnForm, spawnShim, whichBin, winCmdLine, LOCK_FILE, BACKUP_DIR } from "../../../src/setup/index.ts";
 
 const NODE = process.execPath;
 
@@ -370,6 +370,37 @@ test("[CC-WIN-4] whichBin: finds <bin>.cmd in a quoted Windows PATH entry (fake 
 test("winCmdLine: quotes each argument for cmd.exe /d /s /c", () => {
   assert.equal(winCmdLine("C:\\a b\\claude.cmd", ["plugin", "add", "C:\\x y", ""]), '""C:\\a b\\claude.cmd" plugin add "C:\\x y" """');
   assert.equal(winCmdLine("c.cmd", ['say "hi"']), '"c.cmd "say ""hi""""');
+});
+
+// D-WIN-CMDPCT-1 (GEM-WIN-7): cmd.exe expands %VAR% even inside double quotes, and no quoting stops it, so a shim
+// argument or shim path with a % is refused with a message instead of being run with an altered value.
+test("winCmdLine: a % in the shim path or an argument is refused with a clear message (D-WIN-CMDPCT-1)", () => {
+  assert.throws(() => winCmdLine("C:\\p\\gemini.cmd", ["extensions", "link", "C:\\100%\\pkg"]), /cmd\.exe expands %/);
+  assert.throws(() => winCmdLine("C:\\%TEMP%\\gemini.cmd", []), /cmd\.exe expands %/);
+  assert.throws(() => winCmdLine("c.cmd", ["%PATH%"]), /%PATH%/, "the message names the argument");
+  assert.equal(winCmdLine("c.cmd", ["a!b", "a^b", "(x)", "a&b"]), '"c.cmd "a!b" "a^b" "(x)" "a&b""', "every other cmd metacharacter stays quoted");
+  assert.equal(winCmdLine("c.cmd", ["tab\there", "nb\u00a0sp", "plain"]), '"c.cmd "tab\there" "nb\u00a0sp" plain"', "any white space is quoted");
+});
+
+test("spawnForm: a Windows shim with a % argument throws, a native .exe and other platforms are not affected (D-WIN-CMDPCT-1)", () => {
+  assert.throws(() => spawnForm("C:\\n p\\gemini.cmd", ["x", "%APPDATA%"], {}, "win32"), /cmd\.exe expands %/);
+  assert.deepEqual(spawnForm("C:\\n p\\claude.exe", ["%APPDATA%"], {}, "win32").args, ["%APPDATA%"]);
+  assert.deepEqual(spawnForm("/usr/bin/codex.cmd", ["100%"], {}, "linux").args, ["100%"]);
+});
+
+test("spawnShim: a refused % argument is a failed step with the reason, not a throw and not a run (D-WIN-CMDPCT-1)", () => {
+  // platform "win32" is faked, so this runs on every OS; nothing is spawned because the refusal comes first.
+  const r = spawnShim("C:\\n p\\gemini.cmd", ["extensions", "link", "C:\\100%\\pkg"], {}, { encoding: "utf8" }, "win32");
+  assert.equal(r.status, null);
+  assert.match(String(r.stderr), /cmd\.exe expands %/);
+  assert.match(String(r.error?.message), /cmd\.exe expands %/);
+  assert.equal(r.stdout, "");
+});
+
+test("spawnShim: a clean command runs and returns the spawnSync result (D-WIN-CMDPCT-1)", () => {
+  const r = spawnShim(process.execPath, ["-e", "process.stdout.write('ok')"], {}, { encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, "ok");
 });
 
 // D-RN-WIN-1: release smoke spawned `codex` by bare name on Windows and got ENOENT (npm puts only codex.cmd/.ps1 on

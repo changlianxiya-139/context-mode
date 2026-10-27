@@ -1,5 +1,6 @@
 // src/setup/spawn-bin.ts: find an agent CLI on PATH and the spawn form that runs it, shared by setup and
 // scripts/release/smoke.mjs (D-RN-WIN-1). Its only import besides node: is path-entries.ts, which has none, so a release script can load it alone.
+import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from "node:child_process";
 import { accessSync, constants as fsc, statSync } from "node:fs";
 import path from "node:path";
 import { pathEntries } from "../core/sandbox/path-entries.ts";
@@ -33,10 +34,24 @@ export function whichBin(bin: string, env: Env, platform: NodeJS.Platform = proc
   return undefined;
 }
 
+const CMD_QUOTE_CHARS = '"&|<>^()!';
+const CMD_REFUSE_CHAR = "%";
+
+/** True when cmd.exe needs this argument in quotes: empty, white space, or one of its operator characters. */
+function needsCmdQuotes(a: string): boolean {
+  if (a === "") return true;
+  for (const c of a) if (c.trim() === "" || CMD_QUOTE_CHARS.includes(c)) return true;
+  return false;
+}
+
 /** cmd.exe line for a .cmd/.bat shim: Node refuses to spawn those without a shell (CVE-2024-27980). Each argument is
- *  quoted, so paths with spaces survive; the outer quotes are the /s form. */
+ *  quoted, so paths with spaces survive; the outer quotes are the /s form. cmd.exe expands %VAR% even inside quotes and
+ *  no quoting stops it, so a % in the shim path or an argument throws (D-WIN-CMDPCT-1): a changed value is worse than a refusal. */
 export function winCmdLine(file: string, args: string[]): string {
-  const q = (a: string): string => (a === "" || /[\s"&|<>^()%!]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
+  for (const a of [file, ...args]) {
+    if (a.includes(CMD_REFUSE_CHAR)) throw new Error(`cannot run ${file} through cmd.exe: cmd.exe expands %...% inside quotes, so the value ${JSON.stringify(a)} would change. Use a path and arguments without %`);
+  }
+  const q = (a: string): string => (needsCmdQuotes(a) ? `"${a.split('"').join('""')}"` : a);
   return `"${[file, ...args].map(q).join(" ")}"`;
 }
 
@@ -49,4 +64,15 @@ export function spawnForm(file: string, args: string[], env: Env, platform: Node
     return { command: envGet(env, "COMSPEC") || DEFAULT_COMSPEC, args: ["/d", "/s", "/c", winCmdLine(file, args)], windowsVerbatimArguments: true };
   }
   return { command: file, args, windowsVerbatimArguments: false };
+}
+
+/** spawnSync of `file args` in the spawn form for the platform. A refused shim line (see winCmdLine) is a failed
+ *  result (status null, the reason on stderr and error), never a throw, so every caller reports it as a failed step. */
+export function spawnShim(file: string, args: string[], env: Env, opts: SpawnSyncOptions, platform: NodeJS.Platform = process.platform): SpawnSyncReturns<string | Buffer> {
+  let f: SpawnForm;
+  try { f = spawnForm(file, args, env, platform); } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    return { pid: 0, output: [null, "", error.message], stdout: "", stderr: error.message, status: null, signal: null, error };
+  }
+  return spawnSync(f.command, f.args, { ...opts, env, windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
 }

@@ -14,7 +14,7 @@ import {
   OWN_MCP_ENTRY, PLUGIN_KEY_SEPARATOR, PLUGIN_MARKETPLACE_NAME, PLUGIN_NAME, RELEASE_BRANCH, RELEASE_REPO_URL,
   SERVER_ENTRY_FILE, SERVER_KEY, UPGRADE_GIT_TIMEOUT_MS,
 } from "../../src/core/contracts/constants.ts";
-import { pathEntries, spawnForm, whichBin } from "../../src/setup/spawn-bin.ts";
+import { pathEntries, spawnShim, whichBin } from "../../src/setup/spawn-bin.ts";
 
 class StepFailed extends Error {}
 const WIN_ENV_KEYS = Object.freeze(["ComSpec", "PATHEXT", "SystemRoot", "TEMP", "TMP"]);
@@ -63,14 +63,12 @@ function realClaude(pathVar) {
 // With files, spawnSync returns when the direct child exits or the timeout kills it.
 function run(env, cwd, cmd, args, input) {
   const file = path.basename(cmd) === cmd ? (whichBin(cmd, env) ?? cmd) : cmd;
-  const f = spawnForm(file, args, env);
   const io = fs.mkdtempSync(path.join(os.tmpdir(), `${SERVER_KEY}-smoke-io-`));
   const outFile = path.join(io, "out"), errFile = path.join(io, "err");
   const fds = [fs.openSync(outFile, "w"), fs.openSync(errFile, "w")];
   let r;
   try {
-    r = spawnSync(f.command, f.args, { cwd, env, input, stdio: [input === undefined ? "ignore" : "pipe", ...fds],
-      timeout: stepTimeoutMs(), windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
+    r = spawnShim(file, args, env, { cwd, input, stdio: [input === undefined ? "ignore" : "pipe", ...fds], timeout: stepTimeoutMs() });
   } finally {
     for (const fd of fds) fs.closeSync(fd);
   }

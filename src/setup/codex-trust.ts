@@ -5,10 +5,9 @@
 // currentHash from `codex app-server` hooks/list (D-HA-CODEX-TRUST-1). Only context-mode's own handlers are trusted.
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-import { spawnForm, whichBin } from "./spawn-bin.ts";
+import { spawnShim, whichBin } from "./spawn-bin.ts";
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -61,9 +60,8 @@ export function codexHomeFromReply(out: string): string | undefined {
 export function askCodexHome(env: Record<string, string | undefined>): string | undefined {
   const bin = whichBin("codex", env);
   if (!bin) return undefined;
-  const f = spawnForm(bin, ["app-server"], env);
   const input = JSON.stringify({ id: 1, method: "initialize", params: { clientInfo: { name: "context-mode-setup", version: "2.0.0" } } }) + "\n";
-  const r = spawnSync(f.command, f.args, { env, input, encoding: "utf8", timeout: ASK_TIMEOUT_MS, windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
+  const r = spawnShim(bin, ["app-server"], env, { input, encoding: "utf8", timeout: ASK_TIMEOUT_MS });
   return typeof r.stdout === "string" ? codexHomeFromReply(r.stdout) : undefined;
 }
 
