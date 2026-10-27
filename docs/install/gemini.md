@@ -14,6 +14,10 @@ gemini extensions update context-mode
 
 Check: `context-mode doctor`
 
+Testing v2 (next): `gemini extensions install https://github.com/mksglu/context-mode --ref release`
+
+After v2 is on main: `gemini extensions install https://github.com/mksglu/context-mode`
+
 Gemini CLI asks you to confirm the install. Restart Gemini CLI after the install and after each update.
 
 `next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.

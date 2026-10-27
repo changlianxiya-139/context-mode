@@ -15,6 +15,10 @@ codex plugin marketplace upgrade context-mode
 
 Check: `context-mode doctor`
 
+Testing v2 (next): `codex plugin marketplace add mksglu/context-mode@release`, then `codex plugin add context-mode@context-mode`
+
+After v2 is on main: `codex plugin marketplace add mksglu/context-mode`, then `codex plugin add context-mode@context-mode`
+
 The plugin installs the npm package. Codex keeps plugin hooks off until you trust them in the Codex TUI. Restart Codex after the install.
 
 `next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.

@@ -14,6 +14,10 @@ qwen extensions update context-mode
 
 Check: `context-mode doctor`
 
+Testing v2 (next): `qwen extensions install https://github.com/mksglu/context-mode:context-mode --ref release`
+
+After v2 is on main: `qwen extensions install https://github.com/mksglu/context-mode:context-mode`
+
 Qwen Code asks you to confirm the install. Restart Qwen Code after the install and after each update.
 
 `next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
