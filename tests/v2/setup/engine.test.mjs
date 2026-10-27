@@ -500,3 +500,40 @@ test("[D-NI-CODEX-DOCTOR-1] doctor: a disabled codex plugin is still not set up"
   assert.equal(doc.agents[0].status, "FAIL");
   assert.equal(doc.agents[0].reason, "not set up, run context-mode setup");
 });
+
+// D-NI-EXT-DOCTOR-1 (ADR-0023): `qwen extensions install <source>` (Qwen Code 0.26.1) and `gemini extensions install
+// <source>` (gemini-cli 0.65.0) copy the package to ~/.<host>/extensions/context-mode; the extension ships the MCP server,
+// the hooks and skills/. Live run (temp HOME): qwen doctor said "not set up" because setup still planned ~/.qwen/skills.
+// The list shapes below are the real 0.26.1 / 0.65.0 output (qwen on stdout, gemini on stderr, D-INST-2).
+const EXT_LIST = (enabled) => `\\342\\234\\223 other (1.0.0)\\n Path: /x/other\\n Enabled (User): true\\n MCP servers:\\n  context-mode\\n\\342\\234\\223 context-mode (2.0.0)\\n Path: /h/extensions/context-mode\\n Source: /x (Type: local)\\n Enabled (User): ${enabled}\\n Enabled (Workspace): true\\n MCP servers:\\n  context-mode\\n`;
+const EXT_FAKE = (bin, enabled, log, stream) => `echo "$@" >> "${log}"
+case "$1 $2" in
+  "extensions list") printf '${EXT_LIST(enabled)}' ${stream === "stderr" ? ">&2" : ""} ;;
+  "extensions link") exit 7 ;;
+esac
+exit 0`;
+
+for (const [bin, stream] of [["qwen", "stdout"], ["gemini", "stderr"]]) {
+  test(`[D-NI-EXT-DOCTOR-1] doctor and setup: a native ${bin} extension install passes and setup writes nothing`, { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+    const s = sandbox(t);
+    const log = path.join(s.root, `${bin}.log`);
+    fakeBin(s.root, bin, EXT_FAKE(bin, "true", log, stream));
+    const doc = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: [bin] });
+    assert.equal(doc.agents[0].status, "PASS", JSON.stringify(doc.agents[0], null, 2));
+    const names = doc.agents[0].checks.filter((c) => c.ok).map((c) => c.name);
+    for (const n of ["list", "mcp", "hook-registered", "hook-runs", "skills"]) assert.ok(names.includes(n), `${n}: ${JSON.stringify(doc.agents[0].checks)}`);
+    const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: [bin], runId: "r" });
+    assert.equal(res.agents[0].status, "PASS", JSON.stringify(res.agents[0], null, 2));
+    assert.deepEqual(res.agents[0].changes, []);
+    assert.equal(existsSync(path.join(s.home, `.${bin}`)), false, "setup writes nothing under the host dir (no second skill or hook copy)");
+    assert.ok(!readFileSync(log, "utf8").includes("extensions link"), readFileSync(log, "utf8"));
+  });
+
+  test(`[D-NI-EXT-DOCTOR-1] doctor: a disabled native ${bin} extension fails and names the enable command`, { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+    const s = sandbox(t);
+    fakeBin(s.root, bin, EXT_FAKE(bin, "false", path.join(s.root, `${bin}.log`), stream));
+    const doc = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: [bin] });
+    assert.equal(doc.agents[0].status, "FAIL", JSON.stringify(doc.agents[0], null, 2));
+    assert.equal(doc.agents[0].reason, `context-mode is installed but disabled in ${bin}, run ${bin} extensions enable context-mode`);
+  });
+}
