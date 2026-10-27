@@ -3,4 +3,4 @@ name: ctx-stats
 description: Show how much context context-mode saved, as a table.
 disable-model-invocation: true
 ---
-Call the mcp_context-mode_ctx_stats tool and show its table to the user unchanged. Add one sentence under the table that names the largest saving.
+Call the mcp_context-mode_ctx_stats or mcp__context-mode__ctx_stats tool and show its table to the user unchanged. Add one sentence under the table that names the largest saving.

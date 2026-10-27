@@ -11476,7 +11476,7 @@ var DECISION_OPTION_KEY = "option";
 var DECISION_LABEL_JOIN = " | ";
 var RELEASE_REPO_URL = "https://github.com/mksglu/context-mode.git";
 var RELEASE_BRANCH = "release";
-var BUNDLE_SHA = true ? "3374b3ce2faee35730f5c335678ca40b405e923c" : void 0;
+var BUNDLE_SHA = true ? "f61b6973877b47851ac5938c46fee1399946289e" : void 0;
 var DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"]);
 var DOCTOR_LABEL = Object.freeze({
   D1: "version",
@@ -11783,8 +11783,10 @@ var MCP_ARGS_FIELD = "args";
 var ZCODE_MCP_FEATURE_KEY = Object.freeze(["features", "mcp"]);
 var CODEX_OMIT_TOOLS_FROM_FIELD = "omit_tools_from";
 var CODEX_OMIT_DEFERRED = Object.freeze(["deferred"]);
+var CODEX_APPROVAL_MODE_FIELD = "default_tools_approval_mode";
+var CODEX_APPROVAL_APPROVE = "approve";
 var OWN_MCP_ENTRY = Object.freeze({
-  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED } },
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED, [CODEX_APPROVAL_MODE_FIELD]: CODEX_APPROVAL_APPROVE } },
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
@@ -12305,9 +12307,62 @@ function readResult5(resp) {
   const isError = typeof resp === "object" && resp !== null && resp.is_error === true;
   return { isError, bytes: Buffer.byteLength(text), text };
 }
+var CAMEL_EVENTS = {
+  sessionStart: "SessionStart",
+  userPromptSubmitted: "UserPromptSubmit",
+  preToolUse: "PreToolUse",
+  postToolUse: "PostToolUse",
+  preCompact: "PreCompact"
+};
+var EVENT_BY_KEY2 = [
+  ["toolResult", "postToolUse"],
+  ["toolName", "preToolUse"],
+  ["prompt", "userPromptSubmitted"],
+  ["source", "sessionStart"],
+  ["trigger", "preCompact"]
+];
+var SESSION_SOURCES = { new: "startup", startup: "startup", resume: "resume" };
+var RESULT_SUCCESS2 = "success";
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function readArgs2(v) {
+  if (isRecord2(v)) return v;
+  if (typeof v !== "string") return {};
+  try {
+    const parsed = JSON.parse(v);
+    return isRecord2(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function readCamelResult(v) {
+  const r = isRecord2(v) ? v : {};
+  const text = typeof r.textResultForLlm === "string" ? r.textResultForLlm : "";
+  return { isError: typeof r.resultType === "string" && r.resultType !== RESULT_SUCCESS2, bytes: Buffer.byteLength(text), text };
+}
+function decodeCamel(p, name) {
+  const event = typeof name === "string" ? CAMEL_EVENTS[name] ?? VSCODE_EVENTS.find((e) => e === name) : void 0;
+  if (event === void 0) throw new Error("vscode: unknown hook event " + String(name));
+  const ev = { event, agent: "vscode", sessionId: String(p.sessionId ?? ""), cwd: String(p.cwd ?? "") };
+  if (event === "SessionStart" && typeof p.source === "string" && SESSION_SOURCES[p.source] !== void 0) ev.source = SESSION_SOURCES[p.source];
+  if (event === "UserPromptSubmit" && typeof p.prompt === "string") ev.prompt = p.prompt;
+  if (event === "PreToolUse" || event === "PostToolUse") {
+    const toolName = String(p.toolName ?? "");
+    ev.tool = { name: toolName, canonicalName: canonicalName4(toolName), input: readArgs2(p.toolArgs) };
+  }
+  if (event === "PostToolUse") ev.result = readCamelResult(p.toolResult);
+  return ev;
+}
 function decode7(raw) {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("vscode: hook payload is not a JSON object");
   const p = raw;
+  if (p.hookEventName !== void 0) return decodeCamel(p, p.hookEventName);
+  if (p.hook_event_name === void 0) {
+    const byKey = EVENT_BY_KEY2.find(([key]) => Object.hasOwn(p, key))?.[1];
+    if (byKey === void 0) throw new Error("vscode: missing required field hook_event_name");
+    return decodeCamel(p, byKey);
+  }
   const event = VSCODE_EVENTS.find((e) => e === p.hook_event_name);
   if (event === void 0) throw new Error("vscode: unknown hook event " + String(p.hook_event_name));
   const ev = { event, agent: "vscode", sessionId: String(p.session_id ?? ""), cwd: String(p.cwd ?? "") };
@@ -12315,7 +12370,7 @@ function decode7(raw) {
   if (event === "UserPromptSubmit" && typeof p.prompt === "string") ev.prompt = p.prompt;
   if (event === "PreToolUse" || event === "PostToolUse") {
     const name = String(p.tool_name ?? "");
-    const input = typeof p.tool_input === "object" && p.tool_input !== null && !Array.isArray(p.tool_input) ? p.tool_input : {};
+    const input = isRecord2(p.tool_input) ? p.tool_input : {};
     ev.tool = { name, canonicalName: canonicalName4(name), input };
   }
   if (event === "PostToolUse") ev.result = readResult5(p.tool_response);
@@ -12334,12 +12389,14 @@ var KIRO_EVENTS = {
   PromptSubmit: "UserPromptSubmit",
   userPromptSubmit: "UserPromptSubmit",
   PreToolUse: "PreToolUse",
-  PostToolUse: "PostToolUse"
+  preToolUse: "PreToolUse",
+  PostToolUse: "PostToolUse",
+  postToolUse: "PostToolUse"
 };
 var PROMPT_ENV = "USER_PROMPT";
 var MCP_PREFIX3 = "mcp_";
-var SHELL_TOOL_NAME2 = "execute_bash";
-var NATIVE_TO_CANONICAL6 = { [SHELL_TOOL_NAME2]: "Bash" };
+var SHELL_TOOL_NAMES = Object.freeze(["execute_bash", "execute_pwsh", "shell"]);
+var NATIVE_TO_CANONICAL6 = Object.fromEntries(SHELL_TOOL_NAMES.map((n) => [n, "Bash"]));
 var MCP_SEP3 = "_";
 var KIRO_SOURCES = { startup: "startup", resume: "resume", clear: "clear", compact: "compact" };
 function canonicalName5(name) {
@@ -12422,8 +12479,8 @@ var OPENCODE_EVENTS = {
   compaction: "PreCompact",
   "step-finish": "Usage"
 };
-var SHELL_TOOL_NAME3 = "bash";
-var NATIVE_TO_CANONICAL7 = { webfetch: "WebFetch", [SHELL_TOOL_NAME3]: "Bash" };
+var SHELL_TOOL_NAME2 = "bash";
+var NATIVE_TO_CANONICAL7 = { webfetch: "WebFetch", [SHELL_TOOL_NAME2]: "Bash" };
 function toCanonicalTool(name) {
   if (name.startsWith(OWN_WIRE_PREFIX)) return name.slice(OWN_WIRE_PREFIX.length);
   return Object.prototype.hasOwnProperty.call(NATIVE_TO_CANONICAL7, name) ? NATIVE_TO_CANONICAL7[name] : name;
@@ -12543,8 +12600,8 @@ var ADAPTERS = Object.freeze([
     hookTimeoutMs: HOOK_TIMEOUT_MS,
     denyChannel: "deny-reason",
     hookChannel: { kind: "package", path: "hooks/qwen.json" },
-    skillChannel: { kind: "home-dir", path: ".qwen/skills" },
-    // ADR-0020
+    skillChannel: { kind: "package", path: "skills" },
+    // ADR-0020, D-HQ-SKILLS-3: qwen loads <extension>/skills, shared with gemini
     decode: decode5,
     encode: encode5
   },
@@ -12580,8 +12637,8 @@ var ADAPTERS = Object.freeze([
     hookTimeoutMs: HOOK_TIMEOUT_MS,
     denyChannel: "deny-reason",
     hookChannel: { kind: "home-file", path: ".copilot/hooks/context-mode-vscode.json" },
-    skillChannel: { kind: "home-dir", path: ".copilot/skills" },
-    // ADR-0020
+    skillChannel: { kind: "home-dir", path: ".agents/skills" },
+    // ADR-0020, D-HQ-COPILOT-NAMES-3: Copilot CLI owns ~/.copilot/skills
     decode: decode7,
     encode: encode7
   },
@@ -12590,9 +12647,9 @@ var ADAPTERS = Object.freeze([
     installMode: "mcp-entry",
     projectSource: "arg:--agent+cwd",
     toolNamePrefix: TOOL_NAME_PREFIX8,
-    nativeTools: { shell: [SHELL_TOOL_NAME2] },
+    nativeTools: { shell: [...SHELL_TOOL_NAMES] },
     execReadOnlyHint: false,
-    // D-HF-KIRO-SHELL-1
+    // D-HF-KIRO-SHELL-1, D-N7-KIRO-1
     eventMap: { SessionStart: "SessionStart", UserPromptSubmit: "UserPromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse" },
     compactDelivery: "none",
     compactSummary: "none",
@@ -12605,7 +12662,7 @@ var ADAPTERS = Object.freeze([
     encode: encode8
   },
   {
-    // toolNamePrefix and nativeTools unverified until T-ZC (DECISIONS-r9 R3, R4: Claude names).
+    // toolNamePrefix is the documented ZCode name mcp__<server>__<tool> (D-N7-ZCODE-NAMES-1); nativeTools are Claude names.
     id: "zcode",
     installMode: "hooks+mcp",
     projectSource: "spawn-cwd",
@@ -12647,7 +12704,7 @@ var ADAPTERS = Object.freeze([
     installMode: "in-process",
     projectSource: "spawn-cwd",
     toolNamePrefix: TOOL_NAME_PREFIX10,
-    nativeTools: { shell: [SHELL_TOOL_NAME3] },
+    nativeTools: { shell: [SHELL_TOOL_NAME2] },
     execReadOnlyHint: false,
     // D-HF-OPENCODE-SHELL-1
     // Usage: step-finish cost row (DEVIATIONS D-M5-arch-2).
