@@ -31,8 +31,8 @@ test("H1: setup writes the VS Code MCP args with --workspace-folder ${workspaceF
   assert.deepEqual(row.config.value.args, [path.join("/abs/pkg", "server.mjs"), "--agent", "vscode", "--workspace-folder", "${workspaceFolder}"]);
 });
 
-test("H1: the VS Code shell tool run_in_terminal is a native shell tool", () => {
-  assert.deepEqual(getAdapter("vscode").nativeTools.shell, ["run_in_terminal"]);
+test("H1: the VS Code shell tools are run_in_terminal, runTerminalCommand, bash, powershell (D-N7-VSCODE-TOOLS-1)", () => {
+  assert.deepEqual(getAdapter("vscode").nativeTools.shell, ["run_in_terminal", "runTerminalCommand", "bash", "powershell"]);
 });
 
 test("H1: a VS Code hook run from a project resolves it from the payload cwd and denies a large shell read", async () => {

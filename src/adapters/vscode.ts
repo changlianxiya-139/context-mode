@@ -13,9 +13,19 @@ const SESSION_START_NEW = "new"; // impl/10 §7: SessionStart fires only with so
 
 // Own tool -> bare ctx_*; mcp_<server>_<tool> -> "mcp:<server>:<tool>", split at the first "_" after "mcp_"
 // (DEVIATIONS D-M3-A4-3); native names unchanged.
-// D-HF-VSCODE-PROJECT-1: the VS Code agent terminal tool is run_in_terminal; it is the shell tool (Bash).
-export const SHELL_TOOL_NAME = "run_in_terminal";
-const NATIVE_TO_CANONICAL: Readonly<Record<string, string>> = { [SHELL_TOOL_NAME]: "Bash" };
+// D-N7-VSCODE-TOOLS-1: one list of the documented tool names, used by the decoder and the table row.
+// Local harness ids (microsoft/vscode 1.145.0, vscode-copilot-chat 0.44.0 toolNames.ts): run_in_terminal, read_file,
+// fetch_webpage. Copilot harness runtime names (docs.github.com copilot/reference/hooks-reference, "Tool names for
+// hook matching"): bash, powershell, view, web_fetch. runTerminalCommand is in no source; the next.7 npm-package
+// test received it live, so it is mapped as observed. A PascalCase payload names Bash, Read, WebFetch (canonical).
+export const SHELL_TOOL_NAMES: readonly string[] = Object.freeze(["run_in_terminal", "runTerminalCommand", "bash", "powershell"]);
+export const READ_TOOL_NAMES: readonly string[] = Object.freeze(["read_file", "view"]);
+export const WEBFETCH_TOOL_NAMES: readonly string[] = Object.freeze(["fetch_webpage", "web_fetch"]);
+const NATIVE_TO_CANONICAL: Readonly<Record<string, string>> = Object.fromEntries([
+  ...SHELL_TOOL_NAMES.map((n) => [n, "Bash"]),
+  ...READ_TOOL_NAMES.map((n) => [n, "Read"]),
+  ...WEBFETCH_TOOL_NAMES.map((n) => [n, "WebFetch"]),
+]);
 
 function canonicalName(name: string): string {
   if (name.startsWith(TOOL_NAME_PREFIX)) return name.slice(TOOL_NAME_PREFIX.length);
@@ -25,6 +35,30 @@ function canonicalName(name: string): string {
   const sep = rest.indexOf(MCP_SEP);
   if (sep <= 0 || sep === rest.length - 1) return name;
   return "mcp:" + rest.slice(0, sep) + ":" + rest.slice(sep + MCP_SEP.length);
+}
+
+// The policy reads Claude keys (file_path, offset, limit, url). Each tool's documented keys are mapped once here:
+// read_file {filePath, startLine, endLine} (vscode-copilot-chat package.json copilot_readFile), view {path, view_range}
+// (Copilot runtime), fetch_webpage {urls[], query}. The first url is the one checked. Source keys are kept.
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+function policyInput(name: string, canonical: string, input: Record<string, unknown>): Record<string, unknown> {
+  if (canonical === "Read" && READ_TOOL_NAMES.includes(name)) {
+    const out: Record<string, unknown> = { ...input };
+    if (name === "read_file") {
+      if (typeof input.filePath === "string") out.file_path = input.filePath;
+      if (isNum(input.startLine)) out.offset = input.startLine;
+      if (isNum(input.startLine) && isNum(input.endLine) && input.endLine >= input.startLine) out.limit = input.endLine - input.startLine + 1;
+    } else if (Array.isArray(input.view_range) && isNum(input.view_range[0])) {
+      out.offset = input.view_range[0];
+      const end = input.view_range[1];
+      if (isNum(end) && end >= input.view_range[0]) out.limit = end - input.view_range[0] + 1;
+    }
+    return out;
+  }
+  if (canonical === "WebFetch" && name === "fetch_webpage" && Array.isArray(input.urls) && typeof input.urls[0] === "string") {
+    return { ...input, url: input.urls[0] };
+  }
+  return input;
 }
 
 function readResult(resp: unknown): ToolResultInfo {
@@ -79,7 +113,8 @@ function decodeCamel(p: Record<string, unknown>, name: unknown): CanonicalHookEv
   if (event === "UserPromptSubmit" && typeof p.prompt === "string") ev.prompt = p.prompt;
   if (event === "PreToolUse" || event === "PostToolUse") {
     const toolName = String(p.toolName ?? "");
-    ev.tool = { name: toolName, canonicalName: canonicalName(toolName), input: readArgs(p.toolArgs) };
+    const canonical = canonicalName(toolName);
+    ev.tool = { name: toolName, canonicalName: canonical, input: policyInput(toolName, canonical, readArgs(p.toolArgs)) };
   }
   if (event === "PostToolUse") ev.result = readCamelResult(p.toolResult);
   return ev;
@@ -104,7 +139,8 @@ export function decode(raw: unknown): CanonicalHookEvent {
   if (event === "PreToolUse" || event === "PostToolUse") {
     const name = String(p.tool_name ?? "");
     const input = isRecord(p.tool_input) ? p.tool_input : {};
-    ev.tool = { name, canonicalName: canonicalName(name), input };
+    const canonical = canonicalName(name);
+    ev.tool = { name, canonicalName: canonical, input: policyInput(name, canonical, input) };
   }
   if (event === "PostToolUse") ev.result = readResult(p.tool_response);
   return ev;

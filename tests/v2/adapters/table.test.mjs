@@ -40,7 +40,7 @@ const NATIVE = {
   gemini: { shell: ["run_shell_command"], read: ["read_file"], grep: ["grep_search"], webfetch: ["web_fetch"] }, // gemini-cli 0.65.0 *_TOOL_NAME
   qwen: { shell: ["run_shell_command", "Shell"], read: ["read_file"], grep: ["grep_search"], webfetch: ["web_fetch"] },
   "copilot-cli": { shell: ["bash"] }, // D-HA-COPILOT-NAMES-1
-  vscode: { shell: ["run_in_terminal"] }, // D-HF-VSCODE-PROJECT-1
+  vscode: { shell: ["run_in_terminal", "runTerminalCommand", "bash", "powershell"], read: ["read_file", "view"], webfetch: ["fetch_webpage", "web_fetch"] }, // D-HF-VSCODE-PROJECT-1, D-N7-VSCODE-TOOLS-1
   kiro: { shell: ["execute_bash", "execute_pwsh", "shell"] }, // D-HF-KIRO-SHELL-1, D-N7-KIRO-1
   zcode: CLAUDE_NATIVE,
   pi: { shell: ["bash"], read: ["read"] }, // D-HA-PI-NAMES-1
