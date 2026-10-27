@@ -365,6 +365,37 @@ test("D-WIN-BOM-1: a BOM kiro hook file and a BOM vscode JSONC config are read, 
   assert.ok(JSON.parse(after.slice(1)).mcpServers.other, "user server kept");
 });
 
+// KIRO-WIN-2: the kiro hook file ~/.kiro/hooks/context-mode.json and mcp.json, both saved by Notepad or PowerShell 5 with a
+// BOM and CRLF. Setup keeps the user's hook, the BOM and the CRLF; doctor parses both; remove gives the bytes back.
+test("KIRO-WIN-2: kiro setup, doctor and remove read a BOM + CRLF hook file and mcp.json and keep their layout", async (t) => {
+  const s = sandbox(t);
+  const { runDoctor } = await import("../../../src/setup/index.ts");
+  const hookFile = path.join(s.home, ".kiro", "hooks", "context-mode.json");
+  const mcp = path.join(s.home, ".kiro", "settings", "mcp.json");
+  mkdirSync(path.dirname(hookFile), { recursive: true });
+  mkdirSync(path.dirname(mcp), { recursive: true });
+  const ownHook = { name: "my-own", trigger: "PostToolUse", action: { type: "command", command: "my-own-hook" }, enabled: true };
+  const hooksRaw = BOM + toCrlf(JSON.stringify({ version: "v1", hooks: [ownHook] }, null, 2) + "\n");
+  const mcpRaw = BOM + toCrlf(JSON.stringify({ mcpServers: { other: { command: "o" } } }, null, 2) + "\n");
+  writeFileSync(hookFile, hooksRaw);
+  writeFileSync(mcp, mcpRaw);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["kiro"], runId: "a" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  for (const f of [hookFile, mcp]) {
+    const out = readFileSync(f, "utf8");
+    assert.ok(out.startsWith(BOM) && !out.slice(1).includes(BOM), `${f} keeps one BOM`);
+    assert.ok(!hasBareLf(out), `${f} keeps CRLF`);
+  }
+  const hooks = JSON.parse(readFileSync(hookFile, "utf8").slice(1)).hooks;
+  assert.ok(hooks.some((h) => h.action?.command === "my-own-hook"), "user hook kept");
+  assert.ok(hooks.some((h) => String(h.action?.command).includes("hook.mjs")), "our hook added");
+  const d = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["kiro"] });
+  assert.equal(d.agents[0].status, "PASS", JSON.stringify(d.agents[0]));
+  assert.equal(runRemove({ home: s.home, env: s.env }).exitCode, 0);
+  assert.equal(readFileSync(hookFile, "utf8"), hooksRaw, "hook file restored byte for byte");
+  assert.equal(readFileSync(mcp, "utf8"), mcpRaw, "mcp.json restored byte for byte");
+});
+
 // OC-WIN-1: PowerShell 5 writes opencode.json with a BOM and CRLF. Setup, doctor and remove read it, keep the user's
 // keys, keep BOM + CRLF, and remove restores the original bytes. Runs on every OS: the bytes are built in the test.
 test("OC-WIN-1: opencode setup, doctor and remove read a BOM + CRLF opencode.json and keep its layout", async (t) => {
