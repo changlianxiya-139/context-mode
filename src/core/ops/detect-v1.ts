@@ -306,6 +306,7 @@ export interface V1Scope {
   piAgentDir?: string; // env PI_CODING_AGENT_DIR (#1035); none → <home>/.pi/agent
   claudeDir?: string; // env CLAUDE_CONFIG_DIR (D-WF-CC-CONFIG-1); none → <home>/.claude
   copilotDir?: string; // env COPILOT_HOME (D-WIN-COPILOT-HOME-1); none → <home>/.copilot
+  opencodeDir?: string; // env OPENCODE_CONFIG_DIR / XDG_CONFIG_HOME (D-WIN-OPENCODE-DIR-1); none → <home>/.config/opencode
   tmp?: string; // none → os.tmpdir()
 }
 
@@ -314,7 +315,8 @@ export function detectV1(agent: AgentId, home: string, scope: V1Scope = {}): V1F
   const out: V1Finding[] = [];
   const project = scope.project;
   const agentHome = agent === "claude-code" && scope.claudeDir !== undefined ? scope.claudeDir
-    : agent === "copilot-cli" && scope.copilotDir !== undefined ? scope.copilotDir : join(home, ...AGENT_HOME_DIR[agent]);
+    : agent === "copilot-cli" && scope.copilotDir !== undefined ? scope.copilotDir
+    : agent === "opencode" && scope.opencodeDir !== undefined ? scope.opencodeDir : join(home, ...AGENT_HOME_DIR[agent]);
   switch (agent) {
     case "claude-code": scanClaudeCode(home, agentHome, out); break;
     case "codex": scanCodex(agentHome, out); break;

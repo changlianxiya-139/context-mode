@@ -9,6 +9,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
 import { type AtomicOptions, renameWithRetry, replaceFailure, unlinkWithRetry } from "./atomic-file.ts";
+import { opencodeDirOf } from "../project/config-dir.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
 import { withLayout } from "./host-text.ts";
 
@@ -28,7 +29,7 @@ export function hostConfigPath(agent: AgentId, home: string, env: NodeJS.Process
   const own = OWN_MCP_ENTRY[agent];
   if (own !== undefined) return join(home, ...own.file);
   switch (agent) {
-    case "opencode": return join(home, ...AGENT_HOME_DIR.opencode, OPENCODE_BASE_CONFIG_FILE);
+    case "opencode": return join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE); // D-WIN-OPENCODE-DIR-1
     case "pi": return join(env[PI_AGENT_DIR_ENV] ?? join(home, ...AGENT_HOME_DIR.pi, PI_AGENT_DIR), SETTINGS_FILE);
     case "copilot-cli": return null;
     default: return join(home, ...AGENT_HOME_DIR[agent], SETTINGS_FILE);

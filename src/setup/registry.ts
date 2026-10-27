@@ -4,9 +4,9 @@
 import path from "node:path";
 
 import { ADAPTERS, getAdapter } from "../adapters/table.ts";
-import { HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
+import { AGENT_HOME_DIR, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE, OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, SERVER_KEY, TOOL_ORDER, WORKSPACE_FOLDER_FLAG } from "../core/contracts/constants.ts";
 import type { AgentId, AdapterRow, HostConfigFormat } from "../core/contracts/types.ts";
-import { claudeDirOf, copilotDirOf } from "../core/project/config-dir.ts";
+import { claudeDirOf, copilotDirOf, opencodeDirOf } from "../core/project/config-dir.ts";
 import { HOOK_SHAPES, type JsonObject } from "./hook-shapes.ts";
 
 export const SERVER_BUNDLE = "server.mjs";
@@ -59,6 +59,7 @@ const CODEX_CONFIG_FILE = "config.toml";
 const CODEX_HOME_ENV = "CODEX_HOME";
 const CODEX_DIR = ".codex";
 const COPILOT_DIR = ".copilot";
+const OPENCODE_HOME_SEGS = AGENT_HOME_DIR.opencode;
 
 /** D-N5-CODEX-HOME-1: a path under HOME as the agent reads it. Codex reads config.toml, hooks.json and skills/
  *  from $CODEX_HOME (default ~/.codex), so a ".codex/..." path moves under CODEX_HOME when it is set. */
@@ -68,6 +69,8 @@ function agentPath(ctx: SetupContext, id: AgentId, rel: string | readonly string
   if (id === "codex" && segs[0] === CODEX_DIR && codexHome !== undefined && codexHome !== "") return path.join(codexHome, ...segs.slice(1));
   // D-WIN-COPILOT-HOME-1: Copilot CLI only; VS Code's hook file also sits under .copilot/ but VS Code does not read COPILOT_HOME.
   if (id === "copilot-cli" && segs[0] === COPILOT_DIR) return path.join(copilotDirOf(ctx.env, ctx.home), ...segs.slice(1));
+  // D-WIN-OPENCODE-DIR-1: OpenCode's dir is $OPENCODE_CONFIG_DIR, else $XDG_CONFIG_HOME/opencode, else ~/.config/opencode.
+  if (id === "opencode" && segs[0] === OPENCODE_HOME_SEGS[0] && segs[1] === OPENCODE_HOME_SEGS[1]) return path.join(opencodeDirOf(ctx.env, ctx.home), ...segs.slice(2));
   return path.join(ctx.home, ...segs);
 }
 
@@ -177,7 +180,7 @@ function configFor(ctx: SetupContext, id: AgentId): ConfigTarget | undefined {
   }
   if (id === "opencode") { // docs/install/opencode.md: a local MCP entry in opencode.json
     return {
-      file: path.join(ctx.home, ".config", "opencode", "opencode.json"), format: "json", key: ["mcp", SERVER_KEY],
+      file: path.join(opencodeDirOf(ctx.env, ctx.home), OPENCODE_BASE_CONFIG_FILE), format: "json", key: ["mcp", SERVER_KEY],
       value: { type: "local", command: [node, server, flag, agent], enabled: true },
     };
   }
@@ -241,7 +244,7 @@ function hookInstallFor(ctx: SetupContext, row: AdapterRow, command: string): Ho
     return { kind: "file", file, shape: shape(row, command), command };
   }
   if (row.id === "opencode") {
-    return { kind: "plugin-list", file: path.join(ctx.home, ".config", "opencode", "opencode.json"), key: ["plugin"],
+    return { kind: "plugin-list", file: path.join(opencodeDirOf(ctx.env, ctx.home), OPENCODE_BASE_CONFIG_FILE), key: ["plugin"],
       entry: path.join(ctx.pkgDir, ...OPENCODE_PLUGIN) }; // OpenCode reads an absolute path as is (binary 1.x resolver)
   }
   return { kind: "package", via: ch.path };

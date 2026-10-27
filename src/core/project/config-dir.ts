@@ -3,7 +3,7 @@
 // D-CI-PERF-3: node:fs through getBuiltinModule; a static ESM import of node:fs also loads fs/promises, readline and streams.
 const { mkdirSync, realpathSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
 import { join } from "node:path";
-import { AGENT_HOME_DIR, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, COPILOT_HOME_ENV, DATA_ROOT } from "../contracts/constants.ts";
+import { AGENT_HOME_DIR, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, COPILOT_HOME_ENV, DATA_ROOT, OPENCODE_CONFIG_DIR_ENV, XDG_CONFIG_HOME_ENV } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 
 /** The one home rule. An empty value counts as unset; null when nothing is set (D-M3-F-8).
@@ -42,6 +42,17 @@ export function copilotDirOf(env: NodeJS.ProcessEnv, home: string): string {
 export function claudeDirOf(env: NodeJS.ProcessEnv, home: string): string {
   const dir = env[CLAUDE_CONFIG_DIR_ENV];
   return dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR["claude-code"]);
+}
+
+/** D-WIN-OPENCODE-DIR-1: the dir OpenCode reads opencode.json and skills/ from: $OPENCODE_CONFIG_DIR when set and not
+ *  empty, else $XDG_CONFIG_HOME/opencode (OpenCode takes its global dir from xdg-basedir), else <home>/.config/opencode.
+ *  Same shape as codexDirOf. $OPENCODE_CONFIG (a single extra config file, merged on top) does not move the global dir. */
+export function opencodeDirOf(env: NodeJS.ProcessEnv, home: string): string {
+  const own = env[OPENCODE_CONFIG_DIR_ENV];
+  if (own !== undefined && own !== "") return own;
+  const xdg = env[XDG_CONFIG_HOME_ENV];
+  if (xdg !== undefined && xdg !== "") return join(xdg, AGENT_HOME_DIR.opencode[AGENT_HOME_DIR.opencode.length - 1]);
+  return join(home, ...AGENT_HOME_DIR.opencode);
 }
 
 /** The one "home or fail" helper (D-WIN-HOME-3): setup, doctor, upgrade, uninstall, plugin-root and the store all call this.

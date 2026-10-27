@@ -15,7 +15,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, DoctorRow } from "../contracts/types.ts";
 import { hasReplace } from "../../adapters/table.ts";
-import { codexDirOf, copilotDirOf, homeDirOf } from "../project/config-dir.ts";
+import { codexDirOf, copilotDirOf, homeDirOf, opencodeDirOf } from "../project/config-dir.ts";
 import { detectV1, type V1Scope } from "./detect-v1.ts";
 import { hostConfigValueAt, mergeOwnEntries, parseHostConfig, readHostConfig } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -120,7 +120,7 @@ function mcpFile(row: AdapterRow, home: string, env: NodeJS.ProcessEnv): string 
   const spec = OWN_MCP_ENTRY[row.id];
   if (row.id === "codex") return join(codexDirOf(env, home), CONFIG_TOML_FILE); // D-N6-CODEX-HOME-2
   if (spec !== undefined) return join(home, ...spec.file);
-  if (row.id === "opencode") return join(home, ...AGENT_HOME_DIR.opencode, OPENCODE_BASE_CONFIG_FILE);
+  if (row.id === "opencode") return join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE); // D-WIN-OPENCODE-DIR-1
   if (row.id === "pi") {
     const dir = env[PI_AGENT_DIR_ENV];
     return join(dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR.pi, PI_AGENT_DIR), SETTINGS_FILE);

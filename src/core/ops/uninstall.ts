@@ -14,7 +14,7 @@ import {
 import { CtxError } from "../contracts/errors.ts";
 import type { AdapterRow, AgentId, ProjectContext, UpgradeChangeRow } from "../contracts/types.ts";
 import { isInside } from "../project/contain.ts";
-import { requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
+import { opencodeDirOf, requireHomeDir, resolveConfigDir } from "../project/config-dir.ts";
 import { listLiveOwners } from "../store/owners.ts";
 import { hostConfigValueAt, parseHostConfig, readHostConfig, writeHostConfigEdit } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -129,7 +129,7 @@ function ownEntries(agent: AgentId, env: NodeJS.ProcessEnv): OwnEntry[] {
   }
   if (agent === "opencode") {
     return [{
-      file: join(home, ...AGENT_HOME_DIR.opencode, OPENCODE_BASE_CONFIG_FILE),
+      file: join(opencodeDirOf(env, home), OPENCODE_BASE_CONFIG_FILE), // D-WIN-OPENCODE-DIR-1
       key: OPENCODE_PLUGIN_KEY,
       shown: OPENCODE_PLUGIN_KEY,
       has: (v) => Array.isArray(v) && v.includes(OPENCODE_GIT_SPEC),
