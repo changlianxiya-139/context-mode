@@ -116,3 +116,31 @@ test("H2: uninstall drops only mcp.servers.context-mode and keeps the user's oth
   assert.deepEqual(doc.mcp.servers, { other });
   assert.equal(doc.features.mcp, true, "user feature flag kept");
 });
+
+// Z-WIN-1: Notepad and PowerShell 5 (Set-Content -Encoding UTF8) write ~/.zcode/cli/config.json with a BOM and CRLF.
+// Setup edits it, doctor parses it, remove gives the bytes back. Runs on every OS: the bytes are built in the test.
+test("Z-WIN-1: zcode setup, doctor and remove read a BOM + CRLF config.json and keep its layout", async (t) => {
+  const { runRemove } = await import("../../../src/setup/index.ts");
+  const BOM = "﻿";
+  const s = sandbox(t);
+  const file = path.join(s.home, ".zcode", "cli", "config.json");
+  mkdirSync(path.dirname(file), { recursive: true });
+  const other = { type: "stdio", command: "o", args: [], enabled: true };
+  const user = BOM + JSON.stringify({ theme: "dark", mcp: { servers: { other } } }, null, 2).split("\n").join("\r\n") + "\r\n";
+  writeFileSync(file, user);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["zcode"], runId: "z" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res.agents.map((a) => [a.id, a.status, a.reason])));
+  const after = readFileSync(file, "utf8");
+  assert.ok(after.startsWith(BOM) && !after.slice(1).includes(BOM), "one BOM kept");
+  assert.ok(!after.split("\r\n").join("").includes("\n"), "CRLF kept");
+  const doc = JSON.parse(after.slice(1));
+  assert.equal(doc.theme, "dark", "user key kept");
+  assert.deepEqual(doc.mcp.servers.other, other, "user server kept");
+  assert.ok(doc.mcp.servers["context-mode"], "our server added");
+  assert.equal(doc.hooks.enabled, true);
+  const d = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["zcode"] });
+  assert.equal(d.agents[0].status, "PASS", JSON.stringify(d.agents[0]));
+  assert.equal(d.agents[0].checks.find((c) => c.name === "parse")?.ok, true, "doctor parses the BOM file");
+  assert.equal(runRemove({ home: s.home, env: s.env }).exitCode, 0);
+  assert.equal(readFileSync(file, "utf8"), user, "remove restores the original bytes");
+});
