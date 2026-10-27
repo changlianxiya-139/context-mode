@@ -3,15 +3,30 @@
 ## Install
 
 ```sh
-npm i -g context-mode@next
+opencode plugin context-mode@next --global
+```
+
+Update:
+
+```sh
+opencode plugin context-mode@next --global --force
+```
+
+Check: `context-mode doctor`
+
+OpenCode loads the plugin from the npm package `main`. `2.0.0-next.5` has no `main`, so OpenCode refuses it; the next npm release has it (D-NI-OPENCODE-1). The MCP entry may still need the fallback below.
+
+`next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
+Setup is the fallback and the repair for what the native step cannot do:
+
+```sh
 context-mode setup --agents opencode
 ```
 
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents opencode`. Without it, setup stops with exit 2.
 
-Restart OpenCode after setup.
-
-Prefer to do it by hand? Run `context-mode setup --print opencode` and follow what it prints.
+To do the setup step by hand, run `context-mode setup --print opencode` and follow what it prints.
 
 ## What setup changes
 
