@@ -16,8 +16,17 @@ export type PrintStep =
 export interface PrintPlan { agent: string; steps: PrintStep[]; verify: string; }
 
 /** One shell word: left bare when safe, else single-quoted (POSIX shells; PowerShell reads '...' the same). */
+const SHELL_SAFE_PUNCT = "@%+=:,./-_";
+function isShellSafe(s: string): boolean {
+  if (s === "") return false;
+  for (const c of s) {
+    const alnum = (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9");
+    if (!alnum && !SHELL_SAFE_PUNCT.includes(c)) return false;
+  }
+  return true;
+}
 export function shellWord(s: string): string {
-  return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'"'"'`)}'`;
+  return isShellSafe(s) ? s : `'${s.replaceAll("'", `'"'"'`)}'`;
 }
 
 export function printPlan(row: CheckRow): PrintPlan {

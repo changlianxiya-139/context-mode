@@ -618,7 +618,7 @@ export function detectAgents(reg: CheckRow[], ctx: SetupContext): AgentId[] {
 
 export async function runSetup(opts: SetupOptions): Promise<SetupResult> {
   const ctx: SetupContext = { home: opts.home, pkgDir: opts.pkgDir, env: opts.env };
-  const runId = opts.runId ?? new Date().toISOString().replace(/[:.]/g, "-");
+  const runId = opts.runId ?? new Date().toISOString().split(":").join("-").split(".").join("-");
   const reg = buildRegistry(ctx);
   // preflight
   for (const f of ["server.mjs", "hook.mjs"]) {
