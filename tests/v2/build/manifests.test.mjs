@@ -20,6 +20,9 @@ const MATCHERS = {
 const EXPECTED_FILES = [
   ".claude-plugin/marketplace.json",
   ".claude-plugin/plugin.json",
+  ".codex-plugin/hooks.json", // ADR-0023 D-NI-CODEX-1
+  ".codex-plugin/mcp.json",
+  ".codex-plugin/plugin.json",
   "copilot/plugin.json",
   "gemini-extension.json",
   "hooks/claude-code.json",
@@ -195,7 +198,7 @@ test("an unknown installMode is a build-time hard stop (step 4)", (t) => {
 // name, version, bin, type, engines, files and pi (Pi reads "pi".extensions from the package dir); no dependencies,
 // no scripts, no private.
 const D1_FILES = [
-  ".claude-plugin", "SHA256SUMS", "claude-code", "cli.mjs", "copilot", "fixtures", "gemini-extension.json", "hook.mjs", "hooks",
+  ".claude-plugin", ".codex-plugin", "SHA256SUMS", "claude-code", "cli.mjs", "codex", "copilot", "fixtures", "gemini-extension.json", "hook.mjs", "hooks",
   "opencode", "pi", "qwen-extension.json", "run.mjs", "search.mjs", "server.mjs", "skills",
 ];
 test("package.json is the D1 npm shape: name, version, bin, type, engines, files, pi (extensions, skills)", (t) => {
@@ -205,6 +208,7 @@ test("package.json is the D1 npm shape: name, version, bin, type, engines, files
     bin: { "context-mode": "cli.mjs" },
     engines: { node: ">=24.15.0" },
     files: D1_FILES,
+    main: "./opencode/plugin.js", // ADR-0023 D-NI-OPENCODE-1
     name: "context-mode",
     pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
     repository: { type: "git", url: "git+https://github.com/mksglu/context-mode.git" },
@@ -217,7 +221,7 @@ test("package.json is the D1 npm shape: name, version, bin, type, engines, files
 test("assertOutPackageJson throws on dependencies, scripts, private or any other key", () => {
   const ok = {
     name: "context-mode", version: "2.0.0", type: "module", bin: { "context-mode": "cli.mjs" }, engines: { node: ">=24.15.0" },
-    files: D1_FILES, pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
+    files: D1_FILES, main: "./opencode/plugin.js", pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
     repository: { type: "git", url: "git+https://github.com/mksglu/context-mode.git" },
   };
   assert.doesNotThrow(() => assertOutPackageJson(ok));
@@ -233,6 +237,7 @@ test("assertOutPackageJson throws on dependencies, scripts, private or any other
   // D-RN-REPO-1: npm provenance (E422) needs repository.url to name the source repo; npm pkg fix form, so it stays a no-op.
   assert.throws(() => assertOutPackageJson({ ...ok, repository: { type: "git", url: "" } }), /repository/);
   assert.throws(() => assertOutPackageJson({ ...ok, repository: { type: "git", url: "https://github.com/mksglu/context-mode" } }), /repository/);
+  assert.throws(() => assertOutPackageJson({ ...ok, main: "./server.mjs" }), /main/); // ADR-0023 D-NI-OPENCODE-1
   for (const key of ["pi", "bin", "engines", "files", "repository"]) {
     const { [key]: _drop, ...missing } = ok;
     assert.throws(() => assertOutPackageJson(missing), new RegExp(key));

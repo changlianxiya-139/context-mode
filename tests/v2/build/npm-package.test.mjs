@@ -34,6 +34,7 @@ test("[M7] build/npm-d1-shape: release-out/package.json is the D1 package (bin c
     bin: { "context-mode": "cli.mjs" },
     engines: { node: ">=24.15.0" },
     files: top,
+    main: "./opencode/plugin.js", // ADR-0023 D-NI-OPENCODE-1: OpenCode imports the plugin by package name
     name: "context-mode",
     pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
     repository: { type: "git", url: "git+https://github.com/mksglu/context-mode.git" }, // D-RN-REPO-1
