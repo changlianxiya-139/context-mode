@@ -577,3 +577,33 @@ for (const [bin, stream] of [["qwen", "stdout"], ["gemini", "stderr"]]) {
     assert.equal(doc.agents[0].reason, `context-mode is installed but disabled in ${bin}, run ${bin} extensions enable context-mode`);
   });
 }
+
+// GEM-WIN-1, CP-WIN-4 (D-WIN-BOM-2): the BOM + CRLF fixture for the two JSON hook files that are not codex's:
+// gemini's ~/.gemini/settings.json (mode drop) and copilot-cli's ~/.copilot/hooks/context-mode.json (mode rewrite).
+// Windows PowerShell 5 `Set-Content -Encoding UTF8` and Notepad write exactly these bytes.
+for (const [id, rel, v1, check] of [
+  ["gemini", [".gemini", "settings.json"], { theme: "dark", hooks: { BeforeTool: [{ hooks: [{ type: "command", command: "context-mode hook gemini BeforeTool" }] }], AfterTool: [{ hooks: [{ type: "command", command: "my-own-hook" }] }] } },
+    (doc) => { assert.equal(doc.theme, "dark"); assert.equal(JSON.stringify(doc.hooks).includes("context-mode hook gemini"), false); assert.ok(JSON.stringify(doc.hooks).includes("my-own-hook")); }],
+  ["copilot-cli", [".copilot", "hooks", "context-mode.json"], { version: 1, hooks: { sessionEnd: [{ type: "command", bash: "my-own-hook" }] } },
+    (doc) => { assert.ok(JSON.stringify(doc.hooks).includes("hook.mjs")); assert.ok(JSON.stringify(doc.hooks).includes("my-own-hook")); }],
+]) {
+  test(`setup: ${id} hook file with a BOM and CRLF parses, is edited, keeps its layout; remove gives the original bytes back (GEM-WIN-1, CP-WIN-4)`, { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+    const s = sandbox(t);
+    const bin = id === "gemini" ? "gemini" : "copilot";
+    const state = path.join(s.root, "agent.state");
+    fakeBin(s.root, bin, id === "gemini"
+      ? `case "$1 $2" in\n  "extensions list") if [ -f "${state}" ]; then echo "context-mode (2.0.0)" >&2; fi ;;\n  "extensions link") touch "${state}" ;;\n  "extensions uninstall") rm -f "${state}" ;;\nesac\nexit 0`
+      : `case "$1 $2" in\n  "mcp list") if [ -f "${state}" ]; then echo "context-mode"; fi ;;\n  "mcp add") touch "${state}" ;;\n  "mcp remove") rm -f "${state}" ;;\nesac\nexit 0`);
+    const raw = "﻿" + JSON.stringify(v1, null, 2).split("\n").join("\r\n") + "\r\n";
+    const file = put(path.join(s.home, ...rel), raw);
+    const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: [id], runId: "r1" });
+    assert.equal(res.agents[0].status, "PASS", JSON.stringify(res.agents[0], null, 2));
+    const out = readFileSync(file, "utf8");
+    assert.equal(out.charCodeAt(0), 0xfeff, "BOM kept");
+    assert.equal(out.split("\r\n").join("").includes("\n"), false, "every line end is CRLF");
+    check(JSON.parse(out.slice(1)));
+    const rm = await runRemove({ home: s.home, env: s.env, runId: "r1" });
+    assert.equal(rm.exitCode, 0, JSON.stringify(rm, null, 2));
+    assert.equal(readFileSync(file, "utf8"), raw);
+  });
+}
