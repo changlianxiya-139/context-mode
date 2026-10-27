@@ -71,3 +71,26 @@ test("[D-HQ-SKILLS-2] claude-code ships its own skills dir and the plugin reads 
   const entry = JSON.parse(readFileSync(path.join(out, ".claude-plugin", "marketplace.json"), "utf8")).plugins[0];
   assert.equal(entry.skills, "./claude-code/skills");
 });
+
+// N5 (2.0.0-next.5 live runs): codex ctx-stats said "mcp_context-mode_mcp__context_mode__ctx_stats". Setup rendered the
+// home-dir skills from the package skills/ dir, which build.mjs already rendered with Gemini's prefix, so the prefix
+// doubled. Expected names: each host's real tool name as the host lists it (adapters TOOL_NAME_PREFIX, D-HQ-COPILOT-NAMES-2).
+const CTX_STATS_NAME = {
+  "claude-code": "mcp__plugin_context-mode_context-mode__ctx_stats",
+  codex: "mcp__context_mode__ctx_stats",
+  gemini: "mcp_context-mode_ctx_stats",
+  qwen: "mcp__context-mode__ctx_stats",
+  "copilot-cli": "context-mode-ctx_stats or mcp_context-mode_ctx_stats",
+  vscode: "context-mode-ctx_stats or mcp_context-mode_ctx_stats",
+  kiro: "mcp_context-mode_ctx_stats",
+  zcode: "mcp__context-mode__ctx_stats",
+  pi: "ctx_stats",
+  opencode: "ctx_stats",
+};
+
+test("[D-N5-SKILL-1] the built package's ctx-stats skill names each host's real tool once, never a doubled prefix", () => {
+  for (const row of ADAPTERS) {
+    const { texts } = shipped(out, row.id);
+    assert.ok(texts["ctx-stats"].includes("Call the " + CTX_STATS_NAME[row.id] + " tool "), `${row.id}: ${texts["ctx-stats"]}`);
+  }
+});

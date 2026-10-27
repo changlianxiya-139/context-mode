@@ -205,12 +205,21 @@ function hookInstallFor(ctx: SetupContext, row: AdapterRow, command: string): Ho
   return { kind: "package", via: ch.path };
 }
 
+/** D-N5-SKILL-1: the shipped skill dir that holds the bare ctx_* names (a package channel with prefix ""). The
+ *  package skills/ dir is Gemini's rendered copy (D-HQ-SKILLS-1), so rendering it again doubled the prefix. */
+function bareSkillDir(): string {
+  const row = ADAPTERS.find((r) => r.skillChannel.kind === "package" && r.toolNamePrefix === "");
+  if (row === undefined) throw new Error("setup: no package skill channel holds the bare tool names");
+  return row.skillChannel.path;
+}
+
 function skillInstallFor(ctx: SetupContext, row: AdapterRow): SkillInstall {
   const ch = row.skillChannel;
   if (ch.kind === "package") return { kind: "package", via: ch.path };
   const dir = path.join(ctx.home, ch.path);
+  const src = path.join(ctx.pkgDir, bareSkillDir());
   return { kind: "dir", dir, prefixes: skillDirPrefixes(ch.path), files: COMMAND_SKILLS.map((name) => ({
-    name, src: path.join(ctx.pkgDir, SKILLS_DIR, name, SKILL_FILE), file: path.join(dir, name, SKILL_FILE) })) };
+    name, src: path.join(src, name, SKILL_FILE), file: path.join(dir, name, SKILL_FILE) })) };
 }
 
 export function buildRegistry(ctx: SetupContext): CheckRow[] {

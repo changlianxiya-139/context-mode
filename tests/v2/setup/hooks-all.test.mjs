@@ -129,8 +129,9 @@ test("ADR-0020: user hooks in a shared hook file are kept; second run changes no
   assert.equal(existsSync(path.join(s.home, ".codex", "skills", "ctx-stats", "SKILL.md")), false, "created skill removed");
 });
 
-test("ADR-0020: --print lists the hook step and the skill step for every agent", () => {
-  for (const row of buildRegistry({ home: "/h", pkgDir: REPO, env: {} })) { // REPO holds skills/ like the package
+test("ADR-0020: --print lists the hook step and the skill step for every agent", (t) => {
+  // D-N5-SKILL-1: the package layout (pi/skills holds the bare names); the repo root has no pi/skills.
+  for (const row of buildRegistry({ home: "/h", pkgDir: sandbox(t).pkgDir, env: {} })) {
     const kinds = printPlan(row).steps.map((s) => s.kind);
     assert.ok(row.hookInstall, row.id + " hookInstall");
     assert.ok(row.skillInstall, row.id + " skillInstall");
