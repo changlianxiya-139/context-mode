@@ -1,5 +1,5 @@
 // tests/v2/setup/jsonc-host-files.test.mjs
-// VS-WIN-5 (D-WIN-JSONC-1). VS Code reads .vscode/mcp.json and OpenCode reads opencode.json as JSONC (comments,
+// VS-WIN-5 (D-WIN-JSONC-1). VS Code reads its user-profile mcp.json and OpenCode reads opencode.json as JSONC (comments,
 // trailing commas), so setup and doctor must accept such a file and keep the user's comments byte for byte.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,6 +10,7 @@ import path from "node:path";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
 import { generateManifests } from "../../../build/manifests.ts";
 import { runDoctor, runSetup } from "../../../src/setup/index.ts";
+import { vscodeUserDirOf } from "../../../src/core/project/config-dir.ts";
 
 const REPO = path.resolve(import.meta.dirname, "../../..");
 
@@ -50,7 +51,7 @@ const COMMENTED = `{
 
 test("VS-WIN-5: vscode mcp.json with comments and trailing commas is set up, comments kept, doctor passes", async (t) => {
   const s = sandbox(t);
-  const file = path.join(s.home, ".vscode", "mcp.json");
+  const file = path.join(vscodeUserDirOf(s.env, s.home), "mcp.json"); // D-WIN-VSCODE-MCP-1
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, COMMENTED);
   const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["vscode"], runId: "j" });
