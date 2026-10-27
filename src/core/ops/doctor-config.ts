@@ -7,7 +7,7 @@ import { join } from "node:path";
 import {
   AGENT_ARG, AGENT_HOME_DIR, CODEX_FEATURES_HOOKS_KEY, CONFIG_TOML_FILE, D3_DETAIL, D3_PARTS, D4_REASON_JOIN,
   D5B_DETAIL, D5B_FIX, DOCTOR_FIX_UPGRADE, DOCTOR_LABEL, DOCTOR_PASS_DETAIL, HOOK_COMMAND_FIELD, HOOK_COMMAND_SEP,
-  HOOK_ENTRY_FILE, HOOK_GROUP_HOOKS_FIELD, HOOKS_JSON_FILE, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND,
+  HOOK_ENTRY_FILE, HOOK_GROUP_HOOKS_FIELD, HOOKS_JSON_FILE, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND, EXE_SUFFIX,
   HOOKS_KEY, MCP_ANY_MATCH, POST_TOOL_USE, KIRO_ACTION_FIELD, KIRO_TOOL_MATCHERS, KIRO_TRIGGER_FIELD, MATCHER_ALT, MATCHER_ANY, MATCHER_CLOSE, MATCHER_OPEN,
   OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, OWN_TOOL_PREFIX, PI_AGENT_DIR, PI_AGENT_DIR_ENV, REGEX_ESCAPE,
   REGEX_SPECIAL_CHARS, SETTINGS_FILE, SHELL_QUOTE, TOOL_HOOK_EVENTS, V1_PATH_SEPS, VSCODE_CLAUDE_HOOKS_SETTING,
@@ -53,13 +53,34 @@ export function composeMatcher(row: AdapterRow, event?: string): string {
   return MATCHER_OPEN + alts.join(MATCHER_ALT) + MATCHER_CLOSE;
 }
 
-// node <dir>/hook.mjs --agent <id>; the dir may be quoted (claude-code "${CLAUDE_PLUGIN_ROOT}/hook.mjs").
+// <node> <dir>/hook.mjs --agent <id>. <node> is bare `node` (claude-code) or the quoted absolute execPath setup
+// writes, e.g. "C:\\Program Files\\nodejs\\node.exe" (D-VT-DOCTOR-CMD-1). The dir may be quoted too.
+const lastSegment = (p: string): string => {
+  let at = -1;
+  for (const sep of V1_PATH_SEPS) at = Math.max(at, p.lastIndexOf(sep));
+  return p.slice(at + 1);
+};
+
+/** Split the leading token: quoted ("...", no escapes, as setup writes it) or bare up to the first space. */
+function splitHead(command: string): { head: string; rest: string } | null {
+  if (command.startsWith(SHELL_QUOTE)) {
+    const close = command.indexOf(SHELL_QUOTE, 1);
+    if (close < 0 || command.slice(close + 1, close + 1 + HOOK_COMMAND_SEP.length) !== HOOK_COMMAND_SEP) return null;
+    return { head: command.slice(1, close), rest: command.slice(close + 1 + HOOK_COMMAND_SEP.length) };
+  }
+  const end = command.indexOf(HOOK_COMMAND_SEP);
+  return end < 0 ? null : { head: command.slice(0, end), rest: command.slice(end + HOOK_COMMAND_SEP.length) };
+}
+
 function isOwnCommand(command: unknown, agent: AgentId): command is string {
   if (typeof command !== "string") return false;
-  const head = HOST_NODE_COMMAND + HOOK_COMMAND_SEP;
+  const split = splitHead(command);
+  if (split === null) return false;
+  const exe = lastSegment(split.head).toLowerCase();
+  if (exe !== HOST_NODE_COMMAND && exe !== HOST_NODE_COMMAND + EXE_SUFFIX) return false;
   const tail = HOOK_COMMAND_SEP + AGENT_ARG + HOOK_COMMAND_SEP + agent;
-  if (!command.startsWith(head) || !command.endsWith(tail) || command.length <= head.length + tail.length) return false;
-  let script = command.slice(head.length, command.length - tail.length);
+  if (!split.rest.endsWith(tail) || split.rest.length <= tail.length) return false;
+  let script = split.rest.slice(0, split.rest.length - tail.length);
   if (script.startsWith(SHELL_QUOTE) && script.endsWith(SHELL_QUOTE) && script.length > 1) script = script.slice(1, -1);
   return script === HOOK_ENTRY_FILE || V1_PATH_SEPS.some((sep) => script.endsWith(sep + HOOK_ENTRY_FILE));
 }

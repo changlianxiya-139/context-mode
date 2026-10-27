@@ -23,7 +23,7 @@ const put = (file, value) => {
 function codexInstall(home, opts = {}) {
   const codexDir = opts.codexDir ?? path.join(home, ".codex");
   const row = getAdapter("codex");
-  const cmd = "node /opt/cm/hook.mjs --agent codex";
+  const cmd = opts.cmd ?? "node /opt/cm/hook.mjs --agent codex";
   const hooks = {};
   for (const [canonical, native] of Object.entries(row.eventMap)) {
     const group = { hooks: [{ type: "command", command: cmd, timeout: opts.timeout ?? 5 }] };
@@ -189,4 +189,45 @@ test("[D-N7-CODEX-APPROVE-1] doctor-config/D3 names the MCP entry when the codex
   const text = readFileSync(file, "utf8");
   put(file, text.split('default_tools_approval_mode = "approve"\n').join(""));
   assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry");
+});
+
+// W-CODEX-1 (D-VT-DOCTOR-CMD-1): setup writes `"<execPath>" "<dir>/hook.mjs" --agent <id>`; doctor must own it.
+test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 owns the quoted absolute-path hook command setup writes (Windows, POSIX)", (t) => {
+  const cmds = [
+    '"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\a b\\AppData\\ctx\\hook.mjs" --agent codex',
+    '"/usr/local/bin/node" "/opt/my dir/cm/hook.mjs" --agent codex',
+    '"C:\\Program Files\\nodejs\\NODE.EXE" "C:\\ctx\\hook.mjs" --agent codex',
+    'node "/opt/my dir/cm/hook.mjs" --agent codex',
+  ];
+  for (const cmd of cmds) {
+    const home = tmp(t);
+    const row = codexInstall(home, { cmd });
+    const d3 = checkHostConfig(row, { HOME: home }, home);
+    assert.equal(d3.status, "PASS", `${cmd}: ${d3.detail}`);
+  }
+});
+
+test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 rejects a hook command whose first token is not node or whose agent differs", (t) => {
+  const cmds = [
+    '"C:\\tools\\python.exe" "C:\\ctx\\hook.mjs" --agent codex',
+    '"/usr/bin/nodejs-foo" "/opt/cm/hook.mjs" --agent codex',
+    '"/usr/bin/node" "/opt/cm/other.mjs" --agent codex',
+    '"/usr/bin/node" "/opt/cm/hook.mjs" --agent gemini',
+    '"/usr/bin/node "/opt/cm/hook.mjs" --agent codex',
+  ];
+  for (const cmd of cmds) {
+    const home = tmp(t);
+    const row = codexInstall(home, { cmd });
+    assert.equal(checkHostConfig(row, { HOME: home }, home).status, "FAIL", cmd);
+  }
+});
+
+// Runs on every OS; on win32 process.execPath is the real "C:\Program Files\nodejs\node.exe" form (D-VT-DOCTOR-CMD-1).
+test("[D-VT-DOCTOR-CMD-1] doctor-config/D3 owns the exact command setup builds from the real process.execPath", async (t) => {
+  const { hookCommandString } = await import("../../../src/setup/registry.ts");
+  const cmd = hookCommandString({ hookCommand: [process.execPath, path.join(tmp(t), "dir with space", "hook.mjs"), "--agent", "codex"] });
+  const home = tmp(t);
+  const row = codexInstall(home, { cmd });
+  const d3 = checkHostConfig(row, { HOME: home }, home);
+  assert.equal(d3.status, "PASS", `${cmd}: ${d3.detail}`);
 });

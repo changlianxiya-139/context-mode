@@ -629,6 +629,7 @@ export const OPENCODE_TOOL_PREFIX = SERVER_KEY + "_";
 // ops/plugin-root.ts, ops/host-config.ts (impl/07 §1-§2; DEVIATIONS D-M5-O1-1..3).
 export const SERVER_ENTRY_FILE = "server.mjs"; // the MCP server bundle next to hook.mjs in the release root
 export const HOST_NODE_COMMAND = "node"; // MCP entry `command`
+export const EXE_SUFFIX = ".exe"; // Windows node: "C:\\Program Files\\nodejs\\node.exe" (D-VT-DOCTOR-CMD-1)
 export const HOST_CONFIG_TMP_SUFFIX = ".tmp"; // write <file>.tmp, then rename over <file>
 export const HOST_CONFIG_TEXT_PATH = "(given text)"; // CONFIG_PARSE_FAILED <path> when mergeOwnEntries parses text with no file
 export const JSON_INDENT_UNIT = "  "; // indent for a file with no indented member to copy from
