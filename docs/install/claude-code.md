@@ -3,15 +3,31 @@
 ## Install
 
 ```sh
-npm i -g context-mode@next
+claude plugin marketplace add mksglu/context-mode
+claude plugin install context-mode@context-mode
+```
+
+Update:
+
+```sh
+claude plugin update context-mode@context-mode
+```
+
+Check: `context-mode doctor`
+
+In Claude Code itself: `/plugin marketplace add mksglu/context-mode`, then `/plugin install context-mode@context-mode`. Until v2 is on `main`, add the marketplace as `mksglu/context-mode#release`. Restart Claude Code after the install and after each update.
+
+`next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
+Setup is the fallback and the repair for what the native step cannot do:
+
+```sh
 context-mode setup --agents claude-code
 ```
 
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents claude-code`. Without it, setup stops with exit 2.
 
-Restart Claude Code after setup.
-
-Prefer to do it by hand? Run `context-mode setup --print claude-code` and follow what it prints.
+To do the setup step by hand, run `context-mode setup --print claude-code` and follow what it prints.
 
 ## What setup changes
 
@@ -41,7 +57,7 @@ It puts each touched file back. To remove the package too, see [Uninstall](./REA
 
 ## Known limits
 
-- The git route (`claude plugin marketplace add mksglu/context-mode`) works after the owner-only ADR-0011 step b (`marketplace.json` source -> github ref `release` on `main`). Setup does not use it; it adds the package folder from npm.
+- The setup route adds the package folder from npm as a marketplace. The native route adds `mksglu/context-mode` from GitHub; use one of the two, not both.
 - No live, logged-in Claude Code session fired the hooks in any run.
 - `claude mcp add` by hand adds the MCP server only, with no hooks. Use `context-mode setup --print claude-code` instead.
 
