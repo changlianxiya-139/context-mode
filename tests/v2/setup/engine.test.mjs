@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { ADAPTERS } from "../../../src/adapters/table.ts";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
-import { assertWritable, buildRegistry, hostBin, runDoctor, runRemove, runSetup, spawnForm, whichBin, winCmdLine, LOCK_FILE, BACKUP_DIR } from "../../../src/setup/index.ts";
+import { assertWritable, buildRegistry, hostBin, pathEntries, runDoctor, runRemove, runSetup, spawnForm, whichBin, winCmdLine, LOCK_FILE, BACKUP_DIR } from "../../../src/setup/index.ts";
 
 const NODE = process.execPath;
 
@@ -325,6 +325,20 @@ test("whichBin: on Windows only PATHEXT names match (npm's <bin>.cmd shim), PATH
   }
   mkdirSync(path.join(s.bin, "dir.cmd"));
   assert.equal(whichBin("dir", { PATH: s.bin }, "win32"), undefined, "a directory is not a command");
+});
+
+test("[CC-WIN-4] pathEntries: a Windows PATH entry may be wrapped in one pair of double quotes (cmd.exe accepts it); POSIX entries are kept as is", () => {
+  assert.deepEqual(pathEntries('"C:\\Program Files\\nodejs";C:\\bin;;"D:\\a b"', "win32"), ["C:\\Program Files\\nodejs", "C:\\bin", "D:\\a b"]);
+  assert.deepEqual(pathEntries('"C:\\x', "win32"), ['"C:\\x'], "an unpaired quote is left alone");
+  assert.deepEqual(pathEntries('""', "win32"), [], "an empty quoted entry is no entry");
+  assert.deepEqual(pathEntries('"/a":/b', "linux"), ['"/a"', "/b"], "POSIX has no quoted PATH entries");
+});
+
+test("[CC-WIN-4] whichBin: finds <bin>.cmd in a quoted Windows PATH entry (fake win32 on any OS)", (t) => {
+  const s = sandbox(t);
+  writeFileSync(path.join(s.bin, "claude.cmd"), "@echo off\r\n");
+  chmodSync(path.join(s.bin, "claude.cmd"), 0o755);
+  assert.equal(whichBin("claude", { Path: `"${s.bin}"`, PATHEXT: ".EXE;.CMD" }, "win32"), path.join(s.bin, "claude.cmd"));
 });
 
 test("winCmdLine: quotes each argument for cmd.exe /d /s /c", () => {

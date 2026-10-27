@@ -14,7 +14,7 @@ import { detectV1 } from "../core/ops/detect-v1.ts";
 import { editHostConfigText } from "../core/ops/host-config.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
 import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
-import { spawnForm, whichBin, winCmdLine } from "./spawn-bin.ts";
+import { pathEntries, spawnForm, whichBin, winCmdLine } from "./spawn-bin.ts";
 export { spawnForm, whichBin, winCmdLine };
 import { SAMPLE_FILE, hookSample, sampleText, sampleVerdict } from "./hook-sample.ts";
 
@@ -89,7 +89,7 @@ export function hostBin(bin: string, env: SetupContext["env"], platform: NodeJS.
   if (!real) return { file: which(bin, env, platform), shims: [] };
   const get = (k: string): string | undefined => env[Object.keys(env).find((x) => x.toUpperCase() === k) ?? k];
   const shims: string[] = [];
-  for (const dir of (get("PATH") ?? "").split(platform === "win32" ? ";" : ":").filter(Boolean)) {
+  for (const dir of pathEntries(get("PATH") ?? "", platform)) {
     const own = which(bin, { PATH: dir, ...(get("PATHEXT") ? { PATHEXT: get("PATHEXT") } : {}) }, platform);
     for (const f of [own, ...real.extra.map((p) => path.join(dir, ...p))]) {
       if (!f || !existsSync(f) || !statSync(f).isFile()) continue;

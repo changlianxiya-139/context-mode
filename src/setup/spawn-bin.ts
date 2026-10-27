@@ -13,6 +13,14 @@ function envGet(env: Env, k: string): string | undefined {
   return env[Object.keys(env).find((x) => x.toUpperCase() === k) ?? k];
 }
 
+/** The directories of a PATH value. On Windows an entry may be wrapped in one pair of double quotes (cmd.exe accepts
+ *  it, and `path.join` would keep the quotes), so one surrounding pair is cut off with slice; an entry that is empty
+ *  after that is dropped. An unpaired quote stays as is. POSIX entries are used as they are. */
+export function pathEntries(value: string, platform: NodeJS.Platform = process.platform): string[] {
+  const win = platform === "win32";
+  return value.split(win ? ";" : ":").map((e) => (win && e.length >= 2 && e.startsWith('"') && e.endsWith('"') ? e.slice(1, -1) : e)).filter(Boolean);
+}
+
 /** PATH lookup the way the host shell does it. On Windows, npm installs an agent CLI as `<bin>.cmd` (next to an
  *  extensionless sh script that cmd.exe cannot run), so only PATHEXT names match there. Env keys are matched without
  *  case, since Windows spells PATH as `Path`. */
@@ -21,7 +29,7 @@ export function whichBin(bin: string, env: Env, platform: NodeJS.Platform = proc
   const win = platform === "win32";
   const exts = win ? (get("PATHEXT") || WIN_EXT).split(";").filter(Boolean) : [""];
   const names = win && path.extname(bin) ? [bin] : exts.map((e) => bin + e.toLowerCase());
-  for (const dir of (get("PATH") ?? "").split(win ? ";" : ":").filter(Boolean)) {
+  for (const dir of pathEntries(get("PATH") ?? "", platform)) {
     for (const n of names) {
       const f = path.join(dir, n);
       try { accessSync(f, fsc.X_OK); if (statSync(f).isFile()) return f; } catch { /* next */ }

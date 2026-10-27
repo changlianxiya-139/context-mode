@@ -14,7 +14,7 @@ import {
   OWN_MCP_ENTRY, PLUGIN_KEY_SEPARATOR, PLUGIN_MARKETPLACE_NAME, PLUGIN_NAME, RELEASE_BRANCH, RELEASE_REPO_URL,
   SERVER_ENTRY_FILE, SERVER_KEY, UPGRADE_GIT_TIMEOUT_MS,
 } from "../../src/core/contracts/constants.ts";
-import { spawnForm, whichBin } from "../../src/setup/spawn-bin.ts";
+import { pathEntries, spawnForm, whichBin } from "../../src/setup/spawn-bin.ts";
 
 class StepFailed extends Error {}
 const WIN_ENV_KEYS = Object.freeze(["ComSpec", "PATHEXT", "SystemRoot", "TEMP", "TMP"]);
@@ -42,8 +42,7 @@ function realClaude(pathVar) {
     return fs.realpathSync(override);
   }
   const shims = [];
-  for (const dir of pathVar.split(path.delimiter)) {
-    if (dir === "") continue;
+  for (const dir of pathEntries(pathVar)) {
     for (const parts of CLAUDE_CANDIDATES) {
       const candidate = path.join(dir, ...parts);
       if (!fs.existsSync(candidate)) continue;
