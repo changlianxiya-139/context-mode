@@ -3,21 +3,30 @@
 ## Install
 
 ```sh
-npm i -g context-mode@next
+qwen extensions install https://github.com/mksglu/context-mode:context-mode
+```
+
+Update:
+
+```sh
+qwen extensions update context-mode
+```
+
+Check: `context-mode doctor`
+
+Qwen Code asks you to confirm the install. Restart Qwen Code after the install and after each update.
+
+`next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
+Setup is the fallback and the repair for what the native step cannot do:
+
+```sh
 context-mode setup --agents qwen
 ```
 
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents qwen`. Without it, setup stops with exit 2.
 
-Restart Qwen Code after setup.
-
-Prefer to do it by hand? Run `context-mode setup --print qwen` and follow what it prints.
-
-Qwen Code can also install the extension from git, from the `release` branch. It updates by itself:
-
-```sh
-qwen extensions install https://github.com/mksglu/context-mode:context-mode --ref release --consent
-```
+To do the setup step by hand, run `context-mode setup --print qwen` and follow what it prints.
 
 ## What setup changes
 
