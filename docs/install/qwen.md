@@ -36,7 +36,7 @@ To do the setup step by hand, run `context-mode setup --print qwen` and follow w
 
 - Runs `qwen extensions link` on the installed package folder and answers its prompt with `y`.
 - The extension brings the MCP server and the hooks (`hooks/qwen.json`: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse).
-- Writes the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` to `~/.qwen/skills/<name>/SKILL.md`.
+- The extension brings the skills `/ctx-doctor`, `/ctx-stats` and `/ctx-upgrade` (`skills/<name>/SKILL.md`). Qwen Code loads them from the fixed path `<extension>/skills`, shared with Gemini CLI, so each skill names both tools: `mcp_context-mode_ctx_*` or `mcp__context-mode__ctx_*`. Setup writes no skill file to `~/.qwen/skills`.
 - Removes old context-mode hook commands from `~/.qwen/settings.json`.
 - Effect: a large shell or read call is denied, and the reason names `ctx_execute` (deny + redirect).
 - Backs up each file first. A failed step is rolled back byte for byte.

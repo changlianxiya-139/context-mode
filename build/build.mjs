@@ -32,7 +32,7 @@ import {
 import { OUT_FILES, CODEX_PLUGIN_SKILLS, assertOutPackageJson, generateManifests } from "./manifests.ts";
 import { writeHashes } from "./hash.mjs";
 import { isReleaseVersion } from "../scripts/release/release-tags.mjs"; // x.y.z[-pre], D-RN-TAG-1
-import { getAdapter } from "../src/adapters/table.ts";
+import { ADAPTERS, getAdapter } from "../src/adapters/table.ts";
 import { renderSkill } from "../src/setup/registry.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -228,16 +228,22 @@ const SKILL_TARGETS = Object.freeze([
   ["codex", CODEX_PLUGIN_SKILLS],
 ]);
 
+// D-HQ-SKILLS-3: gemini and qwen both load <extension>/skills, so that dir names the tool of every host that reads it.
+function prefixesFor(dir) {
+  return [...new Set(ADAPTERS.filter((r) => r.skillChannel.kind === "package" && r.skillChannel.path === dir).map((r) => r.toolNamePrefix))];
+}
+
 function copySkills(outDir) {
   for (const [id, dir] of SKILL_TARGETS) {
     const row = getAdapter(id);
+    const prefixes = id === "codex" ? row.toolNamePrefix : prefixesFor(dir);
     for (const name of COMMAND_SKILLS) {
       const rel = path.join(SKILLS_DIR, name, SKILL_FILE);
       const src = path.join(REPO_ROOT, rel);
       if (!existsSync(src)) throw new BuildError(`missing ${rel}`);
       const dest = path.join(outDir, dir, name, SKILL_FILE);
       mkdirSync(path.dirname(dest), { recursive: true });
-      writeFileSync(dest, renderSkill(readFileSync(src, "utf8"), row.toolNamePrefix));
+      writeFileSync(dest, renderSkill(readFileSync(src, "utf8"), prefixes));
     }
   }
 }

@@ -57,7 +57,7 @@ export const ADAPTERS: readonly AdapterRow[] = Object.freeze([
     nativeTools: { shell: ["run_shell_command", "Shell"], read: ["read_file"], grep: ["grep_search"], webfetch: ["web_fetch"] }, execReadOnlyHint: false,
     eventMap: CLAUDE_EVENTS,
     compactDelivery: "sessionstart", compactSummary: "none", hookTimeoutMs: HOOK_TIMEOUT_MS, denyChannel: "deny-reason",
-    hookChannel: { kind: "package", path: "hooks/qwen.json" }, skillChannel: { kind: "home-dir", path: ".qwen/skills" }, // ADR-0020
+    hookChannel: { kind: "package", path: "hooks/qwen.json" }, skillChannel: { kind: "package", path: "skills" }, // ADR-0020, D-HQ-SKILLS-3: qwen loads <extension>/skills, shared with gemini
     decode: qwen.decode, encode: qwen.encode,
   },
   {
