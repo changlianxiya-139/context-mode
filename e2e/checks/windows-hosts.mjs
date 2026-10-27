@@ -195,13 +195,13 @@ function hostRoot(id, home, notes) {
 const expand = (s, vars) => Object.entries(vars).reduce((acc, [k, v]) => acc.split(k).join(v), s);
 
 /** The registered hook command line for the event, placeholders expanded as the host does. */
-function registeredHook(id, home, project, notes) {
+function registeredHook(id, home, project, notes, env = process.env) {
   const spec = HOOKS[id];
   const rootDir = hostRoot(id, home, notes);
   const vars = { "${CLAUDE_PLUGIN_ROOT}": rootDir, "${extensionPath}": rootDir, "${/}": path.sep, "${workspaceFolder}": project };
   let file;
   if (spec.file) file = path.join(rootDir, spec.file);
-  else if (id === "codex") file = path.join(home, ".codex", "hooks.json");
+  else if (id === "codex") file = path.join(env.CODEX_HOME || path.join(home, ".codex"), "hooks.json");
   else if (id === "copilot-cli") file = path.join(home, ".copilot", "hooks", "context-mode.json");
   else if (id === "vscode") file = path.join(home, ".copilot", "hooks", "context-mode-vscode.json");
   else if (id === "kiro") file = path.join(home, ".kiro", "hooks", "context-mode.json");
@@ -225,7 +225,7 @@ function registeredServer(id, home, project, notes, env = process.env) {
     case "claude-code": return fix(readJson(path.join(rootDir, ".claude-plugin", "plugin.json")).mcpServers["context-mode"]);
     case "gemini": return fix(readJson(path.join(rootDir, "gemini-extension.json")).mcpServers["context-mode"]);
     case "qwen": return fix(readJson(path.join(rootDir, "qwen-extension.json")).mcpServers["context-mode"]);
-    case "codex": return fix(tomlServer(path.join(process.env.CODEX_HOME || path.join(home, ".codex"), "config.toml")));
+    case "codex": return fix(tomlServer(path.join(env.CODEX_HOME || path.join(home, ".codex"), "config.toml")));
     case "copilot-cli": return fix(readJson(path.join(home, ".copilot", "mcp-config.json")).mcpServers["context-mode"]);
     case "vscode": return fix(readJson(vscodeMcpFile(home, env)).servers["context-mode"]);
     case "kiro": return fix(readJson(path.join(home, ".kiro", "settings", "mcp.json")).mcpServers["context-mode"]);
@@ -285,7 +285,7 @@ function diag(id, home, env) {
     const r = run(b, args, { env, timeout: 60_000 });
     console.log(`DIAG|${OS}|${id}|${h.bin} ${args.join(" ")} -> exit ${r.status} ${r.error ?? ""} stdout=${tail(r.stdout, 600)} stderr=${tail(r.stderr, 600)}`);
   }
-  const cfg = id === "codex" ? path.join(home, ".codex", "config.toml") : id === "opencode" ? path.join(home, ".config", "opencode", "opencode.json") : undefined;
+  const cfg = id === "codex" ? path.join(env.CODEX_HOME || path.join(home, ".codex"), "config.toml") : id === "opencode" ? path.join(home, ".config", "opencode", "opencode.json") : undefined;
   if (cfg) console.log(`DIAG|${OS}|${id}|${cfg} ${existsSync(cfg) ? "holds: " + tail(readFileSync(cfg, "utf8"), 800) : "does not exist"}`);
   console.log(`DIAG|${OS}|${id}|files under HOME: ${walkHome(home).slice(0, 40).join(", ")}`);
 }
@@ -314,7 +314,7 @@ function stepHook(id, home, project, env) {
   try {
     const text = sampleText();
     writeFileSync(path.join(project, "big.log"), text);
-    const line = registeredHook(id, home, project, notes);
+    const line = registeredHook(id, home, project, notes, env);
     const spec = HOOKS[id];
     const r = runShellLine(line, { env, cwd: project, input: JSON.stringify(payloadFor(id, project, text)), powershell: id === "gemini" });
     const seen = spec.answerOn === "stderr" ? r.stderr : r.stdout;
@@ -416,6 +416,10 @@ async function main() {
     delete env.FAKE;
     if (WIN) { env.APPDATA = path.join(home, "AppData", "Roaming"); env.LOCALAPPDATA = path.join(home, "AppData", "Local"); }
     delete env.CODEX_HOME;
+    // Codex finds its home with the Rust dirs crate, which asks Windows for the profile folder and ignores HOME and
+    // USERPROFILE (openai/codex codex-rs/utils/home-dir). Without CODEX_HOME it reads the runner's real ~/.codex, never
+    // this test HOME, so `codex mcp list` cannot see what setup wrote. CODEX_HOME must exist (find_codex_home).
+    if (WIN && h.id === "codex") { env.CODEX_HOME = path.join(home, ".codex"); mkdirSync(env.CODEX_HOME, { recursive: true }); }
     delete env.XDG_CONFIG_HOME; delete env.OPENCODE_CONFIG_DIR; // D-WIN-OPENCODE-DIR-1: OpenCode reads these before <home>/.config; the runner sets XDG_CONFIG_HOME
     stepSetup(h.id, env);
     stepDoctor(h.id, env);
