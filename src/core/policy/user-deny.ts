@@ -6,6 +6,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
 import { CLAUDE_CONFIG_DIR_ENV } from "../contracts/constants.ts";
 import { claudeDirOf, homeDirOf } from "../project/config-dir.ts";
+import { hostText } from "../ops/host-text.ts";
 
 // Host file names, not tunable values (same rule as index/walk.ts GITIGNORE). D-M3-E2-2.
 const CLAUDE_DIR = ".claude";
@@ -45,7 +46,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function readOne(file: string): FileDeny {
   let text: string;
   try {
-    text = readFileSync(file, "utf8");
+    text = hostText(readFileSync(file, "utf8"));
   } catch (err) {
     return (err as NodeJS.ErrnoException).code === "ENOENT" ? { kind: "absent" } : { kind: "bad" };
   }

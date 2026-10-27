@@ -2,7 +2,7 @@
 // #849 .jsonc wins, #808 string-aware comment strip), TECH-SPEC §3.11; DEVIATIONS D-M5-O1-1..4.
 // No regex: every parse below is a character scanner. JSON/JSONC edits touch only the edited value span,
 // so comments and untouched text survive byte for byte.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   AGENT_ARG, HOST_CONFIG_TEXT_PATH, HOST_NODE_COMMAND, JSON_INDENT_UNIT, JSONC_EXT,
@@ -11,9 +11,11 @@ import {
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import { atomicWriteFile } from "./atomic-file.ts";
+import { hostLayout, hostText, withLayout } from "./host-text.ts";
+import type { HostLayout } from "./host-text.ts";
 import type { AdapterRow, AgentId, HostConfigEdit, HostConfigFormat, HostConfigResult } from "../contracts/types.ts";
 
-export interface HostConfigText { agent: AgentId; text: string; format: HostConfigFormat; path: string; }
+export interface HostConfigText { agent: AgentId; text: string; format: HostConfigFormat; path: string; layout?: HostLayout; }
 type KeyPath = readonly string[];
 
 // ---------------------------------------------------------------------------------------------- read
@@ -32,8 +34,8 @@ export function readHostConfig(agent: AgentId, path: string): HostConfigText {
     const jsonc = join(dirname(path), OPENCODE_CONFIG_FILES[0]);
     if (existsSync(jsonc)) file = jsonc;
   }
-  const text = existsSync(file) ? readFileSync(file, "utf8") : "";
-  return { agent, text, format: formatOf(file), path: file };
+  const raw = existsSync(file) ? readFileSync(file, "utf8") : "";
+  return { agent, text: hostText(raw), format: formatOf(file), path: file, layout: hostLayout(raw) }; // CC-WIN-3: BOM and CRLF off for parsing
 }
 
 // ------------------------------------------------------------------------------------------ JSONC scan
@@ -523,6 +525,6 @@ export function writeHostConfigEdit(_requested: string, current: HostConfigText,
   const wanted = Object.entries(patch).map(([k, v]): [KeyPath, unknown] => [[k], v]);
   const result = applyEdits(current.agent, current.path, current.text, current.format, wanted);
   if (result.edits.length === 0) return [];
-  atomicWriteFile(current.path, result.text);
+  atomicWriteFile(current.path, current.layout === undefined ? result.text : withLayout(result.text, current.layout));
   return result.edits;
 }

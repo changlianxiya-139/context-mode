@@ -3,6 +3,7 @@
 // D-CI-PERF-3: node:fs through getBuiltinModule; a static ESM import of node:fs also loads fs/promises, readline and streams.
 const { readFileSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
 import { join } from "node:path";
+import { hostText } from "../ops/host-text.ts";
 import {
   AGENT_FILE_EXT, AGENTS_DIR_NAME, FRONTMATTER_DISALLOWED_KEY, FRONTMATTER_FENCE, FRONTMATTER_TOOLS_KEY,
   GEMINI_MCP_PREFIX, GEMINI_NAME_EXTRA_CHARS, HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE,
@@ -104,7 +105,7 @@ function readPluginAgent(claudeDir: string, type: string): AgentDef | null {
   if (agent.indexOf(PLUGIN_AGENT_SEPARATOR) >= 0) return null;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(join(claudeDir, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE), "utf8"));
+    parsed = JSON.parse(hostText(readFileSync(join(claudeDir, HOST_PLUGINS_DIR_NAME, INSTALLED_PLUGINS_FILE), "utf8")));
   } catch {
     return null;
   }

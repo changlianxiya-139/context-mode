@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
 import type { V1Finding } from "../contracts/types.ts";
+import { hostText } from "./host-text.ts";
 import {
   AGENT_HOME_DIR, CLAUDE_USER_CONFIG_FILE, CONFIG_JSON_FILE, CONFIG_TOML_FILE, DATA_ROOT, GITHUB_DIR_NAME,
   HOOKS_JSON_FILE, HOOKS_KEY, KIRO_AGENT_FILE, KIRO_AGENT_FILE_EXT, KIRO_AGENT_NAME_KEY, KIRO_AGENTS_DIR,
@@ -63,7 +64,7 @@ function stripJsonc(text: string): string {
 /** A missing or unparseable file is not a finding (impl/07 §3 Errors: this function cannot fail). */
 function readJson(file: string): unknown {
   try {
-    return JSON.parse(stripJsonc(readFileSync(file, "utf8")));
+    return JSON.parse(stripJsonc(hostText(readFileSync(file, "utf8"))));
   } catch {
     return undefined;
   }
@@ -71,7 +72,7 @@ function readJson(file: string): unknown {
 
 function readText(file: string): string {
   try {
-    return readFileSync(file, "utf8");
+    return hostText(readFileSync(file, "utf8"));
   } catch {
     return "";
   }

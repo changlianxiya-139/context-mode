@@ -14,6 +14,7 @@ import type { AgentId, V1Finding } from "../core/contracts/types.ts";
 import { detectV1 } from "../core/ops/detect-v1.ts";
 import { atomicWriteFile, renameWithRetry } from "../core/ops/atomic-file.ts";
 import { editHostConfigText } from "../core/ops/host-config.ts";
+import { hostLayout, hostText, withLayout } from "../core/ops/host-text.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
 import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
 import { pathEntries, spawnForm, whichBin, winCmdLine } from "./spawn-bin.ts";
@@ -79,7 +80,7 @@ function isNativeBinary(file: string): boolean {
 function owningPackage(dir: string): string | undefined {
   for (let d = dir; ; d = path.dirname(d)) {
     const f = path.join(d, "package.json");
-    if (existsSync(f)) { try { return String(JSON.parse(readFileSync(f, "utf8")).name); } catch { return undefined; } }
+    if (existsSync(f)) { try { return String(JSON.parse(hostText(readFileSync(f, "utf8"))).name); } catch { return undefined; } }
     if (path.dirname(d) === d) return undefined;
   }
 }
@@ -109,7 +110,10 @@ function runBin(bin: string, args: string[], env: SetupContext["env"], input?: s
   return spawnSync(f.command, f.args, { env, encoding: "utf8", input, timeout: VERIFY_TIMEOUT_MS, windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
 }
 
-function readOr(file: string): string | undefined { return existsSync(file) ? readFileSync(file, "utf8") : undefined; }
+/** CC-WIN-3: host file text as plain LF without a BOM (PowerShell 5 writes both); apply gives the layout back. */
+function readOr(file: string): string | undefined { return existsSync(file) ? hostText(readFileSync(file, "utf8")) : undefined; }
+/** The bytes as they are: backups, and files that are rendered whole (skills). */
+function readRaw(file: string): string | undefined { return existsSync(file) ? readFileSync(file, "utf8") : undefined; }
 
 const atomicWrite = atomicWriteFile; // D-WIN-ATOMIC-1: retries a Windows "file in use" rename, removes its tmp file on failure
 
@@ -127,7 +131,7 @@ function parseFail(_row: CheckRow, file: string): string { return `${file} does 
 
 // ---------- plan ----------
 
-interface FileEdit { file: string; before: string | undefined; after: string; changes: Change[]; }
+interface FileEdit { file: string; before: string | undefined; after: string; changes: Change[]; plain?: boolean; }
 interface Plan { edits: FileEdit[]; cli: string[][]; refresh: string[][]; }
 
 type Json = Record<string, unknown>;
@@ -234,8 +238,8 @@ function planSkills(row: CheckRow, edits: FileEdit[]): void {
   for (const f of s.files) {
     if (!existsSync(f.src)) throw new Error(`preflight: ${f.src} is missing`);
     const after = renderSkill(readFileSync(f.src, "utf8"), s.prefixes);
-    const before = readOr(f.file);
-    if (before !== after) edits.push({ file: f.file, before, after, changes: [{ file: f.file, path: f.name, before: before === undefined ? null : "old", after: "SKILL.md" }] });
+    const before = readRaw(f.file);
+    if (before !== after) edits.push({ plain: true, file: f.file, before, after, changes: [{ file: f.file, path: f.name, before: before === undefined ? null : "old", after: "SKILL.md" }] });
   }
 }
 
@@ -271,7 +275,7 @@ function listCheck(row: CheckRow, env: SetupContext["env"]): Check | undefined {
 
 function packageVersion(pkgDir: string): string | undefined {
   try {
-    const v: unknown = JSON.parse(readFileSync(path.join(pkgDir, "package.json"), "utf8")).version;
+    const v: unknown = JSON.parse(hostText(readFileSync(path.join(pkgDir, "package.json"), "utf8"))).version;
     return typeof v === "string" ? v : undefined;
   } catch { return undefined; }
 }
@@ -372,7 +376,7 @@ function parseCheck(row: CheckRow): Check {
   const c = row.config;
   if (!c) return { name: "parse", ok: true };
   try {
-    const r = editHostConfigText(row.id, c.file, readFileSync(c.file, "utf8"), c.format, configEdits(c));
+    const r = editHostConfigText(row.id, c.file, readOr(c.file) ?? "", c.format, configEdits(c));
     return { name: "parse", ok: r.edits.length === 0, detail: r.edits.length ? "entry differs after write" : undefined };
   } catch (e) { return { name: "parse", ok: false, detail: (e as Error).message }; }
 }
@@ -447,7 +451,7 @@ function skillsCheck(row: CheckRow, pkgDir: string): Check {
     const miss = COMMAND_SKILLS.map((n) => path.join(pkgDir, s.via, n, SKILL_FILE)).filter((f) => !existsSync(f));
     return { name: "skills", ok: miss.length === 0, detail: miss.length ? `missing ${miss.join(", ")}` : undefined };
   }
-  const bad = s.files.filter((f) => readOr(f.file) !== (existsSync(f.src) ? renderSkill(readFileSync(f.src, "utf8"), s.prefixes) : undefined));
+  const bad = s.files.filter((f) => readRaw(f.file) !== (existsSync(f.src) ? renderSkill(readFileSync(f.src, "utf8"), s.prefixes) : undefined));
   return { name: "skills", ok: bad.length === 0, detail: bad.length ? `${bad.map((f) => f.file).join(", ")} missing or without the ${s.prefixes.join(" / ") || "plain"} tool prefix` : undefined };
 }
 
@@ -660,8 +664,9 @@ async function setupRow(row: CheckRow, ctx: SetupContext, run: Run, dryRun: bool
   try {
     for (const e of plan.edits) {
       assertWritable(row, e.file);
-      run.record({ agent: row.id, file: e.file, existed: e.before !== undefined }, e.before);
-      atomicWrite(e.file, e.after);
+      const raw = readRaw(e.file); // the backup holds the bytes as they were, BOM and CRLF included
+      run.record({ agent: row.id, file: e.file, existed: raw !== undefined }, raw);
+      atomicWrite(e.file, e.plain || raw === undefined ? e.after : withLayout(e.after, hostLayout(raw)));
     }
     for (const args of plan.cli) {
       const r = runBin(row.cli!.bin, args, ctx.env, row.cli!.input ?? "");

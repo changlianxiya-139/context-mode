@@ -16,6 +16,7 @@ import {
 } from "../contracts/constants.ts";
 import { atomicWriteFile, renameWithRetry } from "./atomic-file.ts";
 import { parseHostConfig, writeHostConfigEdit } from "./host-config.ts";
+import { hostLayout, hostText, withLayout } from "./host-text.ts";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -82,7 +83,8 @@ function locate(doc: unknown, path: string): [Obj | unknown[], string] | null {
 
 /** Drop every finding's entry from one JSON/JSONC file in one write; returns the findings actually found. */
 function stripJsonEntries(agent: AgentId, file: string, findings: V1Finding[], kept: Set<string>, undo: Undo[]): Set<V1Finding> {
-  const text = readFileSync(file, "utf8");
+  const layout = hostLayout(readFileSync(file, "utf8"));
+  const text = hostText(readFileSync(file, "utf8"));
   const doc = parseHostConfig(agent, file, text, "jsonc");
   const hit = new Set<V1Finding>();
   const byContainer = new Map<Obj | unknown[], Set<string>>();
@@ -107,7 +109,7 @@ function stripJsonEntries(agent: AgentId, file: string, findings: V1Finding[], k
   const patch: Obj = {};
   for (const k of topKeys) patch[k] = (doc as Obj)[k];
   keepOriginal(file, kept, undo);
-  writeHostConfigEdit(file, { agent, text, format: "jsonc", path: file }, patch);
+  writeHostConfigEdit(file, { agent, text, format: "jsonc", path: file, layout }, patch);
   return hit;
 }
 
@@ -130,14 +132,16 @@ export function removeV1(agent: AgentId, findings: readonly V1Finding[]): V1Remo
   for (const [file, list] of entries) {
     if (!existsSync(file)) { for (const f of list) done.set(f, UPGRADE_NOT_FOUND); continue; }
     if (file.endsWith(TOML_EXT)) {
-      let text = readFileSync(file, "utf8");
+      const rawToml = readFileSync(file, "utf8");
+      const tomlLayout = hostLayout(rawToml);
+      let text = hostText(rawToml);
       for (const f of list) {
         const next = cutTomlTable(text, f.path);
         if (next === null) { done.set(f, UPGRADE_NOT_FOUND); continue; }
         text = next;
         done.set(f, UPGRADE_REMOVED);
       }
-      if (list.some((f) => done.get(f) === UPGRADE_REMOVED)) { keepOriginal(file, kept, undo); writeAtomic(file, text); }
+      if (list.some((f) => done.get(f) === UPGRADE_REMOVED)) { keepOriginal(file, kept, undo); writeAtomic(file, withLayout(text, tomlLayout)); }
       continue;
     }
     const hit = stripJsonEntries(agent, file, list, kept, undo);

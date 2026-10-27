@@ -10,6 +10,7 @@ import {
 import type { AdapterRow, AgentId, HostConfigEdit, UpgradeChangeRow } from "../contracts/types.ts";
 import { renameWithRetry } from "./atomic-file.ts";
 import { mergeOwnEntries, readHostConfig } from "./host-config.ts";
+import { withLayout } from "./host-text.ts";
 
 /** Writes `text` to `file`. Injected only by tests to force a failure mid-write (GP11 rollback). */
 export type HostFileWriter = (file: string, text: string) => void;
@@ -74,6 +75,6 @@ export function regenerateHostConfig(row: AdapterRow, home: string, opts: HostWr
   const exists = existsSync(current.path);
   if (exists && result.text === current.text) return [];
   const text = result.text === "" && current.format !== "toml" ? JSON.stringify({}) : result.text;
-  writeWithRollback(current.path, text, opts.write ?? defaultWrite);
+  writeWithRollback(current.path, current.layout === undefined ? text : withLayout(text, current.layout), opts.write ?? defaultWrite);
   return result.edits.map((e) => toRow(current.path, e));
 }

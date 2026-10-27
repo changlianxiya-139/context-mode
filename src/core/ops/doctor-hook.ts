@@ -5,6 +5,7 @@
 // the wall time against HOOK_P95_MS. An agent with no recorded payload is UNKNOWN, never a guessed payload.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { hostText } from "./host-text.ts";
 import {
   AGENT_ARG, D5_CODEX_UNTRUSTED_DETAIL, D5_FIX, D5_NO_FIXTURE_DETAIL, D5_SHAPE_DETAIL, D5_SLOW_DETAIL,
   DOCTOR_LABEL, DOCTOR_PASS_DETAIL, HOOK_ENTRY_FILE, HOOK_FIXTURE_DIR, HOOK_FIXTURE_FILE, HOOK_P95_MS,
@@ -42,7 +43,7 @@ function loadFixture(bundleDir: string, agent: AgentId): FixtureEntry | null {
   if (!existsSync(file)) return null;
   let all: unknown;
   try {
-    all = JSON.parse(readFileSync(file, "utf8"));
+    all = JSON.parse(hostText(readFileSync(file, "utf8")));
   } catch {
     return null;
   }

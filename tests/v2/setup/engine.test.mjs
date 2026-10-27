@@ -182,6 +182,32 @@ test("setup --remove restores every touched file byte for byte, and deletes file
   assert.equal(existsSync(kiro), false);
 });
 
+test("setup: host files with a BOM and CRLF (PowerShell 5 UTF8) parse, are edited, and keep their layout; the backup holds the original bytes (CC-WIN-3)", async (t) => {
+  const s = sandbox(t);
+  const bom = "\uFEFF";
+  const crlf = (text) => text.split("\n").join("\r\n");
+  const hooksRaw = bom + crlf(CODEX_HOOKS_V1);
+  const tomlRaw = bom + crlf(CODEX_V1);
+  const codexHooks = put(path.join(s.home, ".codex", "hooks.json"), hooksRaw);
+  const codexToml = put(path.join(s.home, ".codex", "config.toml"), tomlRaw);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["codex"], runId: "r1" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res, null, 2));
+  for (const f of [codexHooks, codexToml]) {
+    const out = readFileSync(f, "utf8");
+    assert.equal(out.charCodeAt(0), 0xfeff, `${f} keeps its BOM`);
+    assert.equal(out.split("\r\n").join("").includes("\n"), false, `${f}: every line end is CRLF`);
+  }
+  const hooks = JSON.parse(readFileSync(codexHooks, "utf8").slice(1));
+  assert.equal(hooks.hooks.PreToolUse[0].hooks[0].command, `"${NODE}" "${path.join(s.pkgDir, "hook.mjs")}" --agent codex`);
+  assert.equal(hooks.hooks.Stop[0].hooks[0].command, "my-own-hook");
+  const saved = readdirSync(path.join(res.backupDir, "files")).map((n) => readFileSync(path.join(res.backupDir, "files", n), "utf8"));
+  assert.ok(saved.includes(hooksRaw) && saved.includes(tomlRaw), "backup keeps the original bytes");
+  const rm = await runRemove({ home: s.home, env: s.env, runId: "r1" });
+  assert.equal(rm.exitCode, 0);
+  assert.equal(readFileSync(codexHooks, "utf8"), hooksRaw);
+  assert.equal(readFileSync(codexToml, "utf8"), tomlRaw);
+});
+
 test("setup: a file that does not parse is refused and left as is", async (t) => {
   const s = sandbox(t);
   const kiro = put(path.join(s.home, ".kiro", "settings", "mcp.json"), "{ not json");
