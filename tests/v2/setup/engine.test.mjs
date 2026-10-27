@@ -323,7 +323,7 @@ test("[M7] setup/doctor: a report-only v1 finding (shared OS temp file) does not
   mkdirSync(home, { recursive: true });
   const pkgDir = fakePkg(root);
   // Timing is not under test here (the D3 gate has its own tests): same CI-only knob as the sandbox() helper.
-  const env = { ...process.env, HOME: home, PATH: path.dirname(NODE), CM_HOOK_OVERHEAD_BUDGET_MS: "60000" };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, PATH: path.dirname(NODE), CM_HOOK_OVERHEAD_BUDGET_MS: "60000" };
   // A context-mode-* file in the OS temp dir is a v1 footprint, report only (UPGRADE_REPORT_ONLY_REASONS).
   const stray = path.join(tmpdir(), `context-mode-doctor-test-${process.pid}.db`);
   writeFileSync(stray, "");

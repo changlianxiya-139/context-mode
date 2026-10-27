@@ -132,7 +132,7 @@ for (const cmd of ["server", "mcp"]) {
   test(`[M7] cli/${cmd}: "${cmd}" runs server.mjs and answers MCP initialize on stdio`, () => {
     const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } };
     const r = spawnSync(process.execPath, [path.join(out, "cli.mjs"), cmd, "--agent", "claude-code"], {
-      encoding: "utf8", input: JSON.stringify(init) + "\n", timeout: 20000, env: { ...process.env, HOME: scratch, CONTEXT_MODE_DIR: path.join(scratch, "cm") },
+      encoding: "utf8", input: JSON.stringify(init) + "\n", timeout: 20000, env: { ...process.env, HOME: scratch, USERPROFILE: scratch, CONTEXT_MODE_DIR: path.join(scratch, "cm") },
     });
     const line = r.stdout.split("\n").find((l) => l.includes('"id":1'));
     assert.ok(line, r.stderr);

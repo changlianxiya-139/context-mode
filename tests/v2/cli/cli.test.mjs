@@ -237,6 +237,19 @@ test("[WIN] cli/home-rule: setup uses the D-M1-T3-1 home rule (HOME, then USERPR
   assert.ok(r.stdout.includes(path.join(s.home, ".codex", "config.toml")), `plan must edit ${s.home}/.codex/config.toml, got:\n${r.stdout}`);
 });
 
+test("[WIN] cli/home-rule: HOME and USERPROFILE differ (Git Bash, MSYS): win32 plans under USERPROFILE, POSIX under HOME (D-WIN-HOME-2, GEM-WIN-3, PI-WIN-4)", (t) => {
+  const s = sandbox(t);
+  codexHome(s);
+  const other = path.join(s.root, "msys-home"); // a second home the host never reads on Windows
+  mkdirSync(other, { recursive: true });
+  const win = process.platform === "win32";
+  const env = { ...s.env, HOME: win ? other : s.home, USERPROFILE: win ? s.home : other };
+  const r = spawnSync(process.execPath, [path.join(s.pkg, "cli.mjs"), "setup", "--dry-run", "--agents", "codex"], { encoding: "utf8", timeout: 60_000, env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes(path.join(s.home, ".codex", "config.toml")), `plan must edit ${s.home}/.codex/config.toml, got:\n${r.stdout}`);
+  assert.ok(!r.stdout.includes(other), `plan must not touch the other home ${other}`);
+});
+
 test("[M7] cli/dry-run: setup --dry-run shows the plan and writes nothing", (t) => {
   const s = sandbox(t);
   codexHome(s);

@@ -92,7 +92,7 @@ function safeType(type: string): boolean {
   return true;
 }
 
-// D-M1-T3-1 rule via config-dir.ts (D-M3-F-8): HOME, then USERPROFILE, on every OS.
+// Home rule via config-dir.ts (D-M3-F-8, D-WIN-HOME-2): USERPROFILE first on win32, HOME first on POSIX.
 function homeDir(env: NodeJS.ProcessEnv): string | null {
   return homeDirOf(env);
 }

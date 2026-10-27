@@ -29,7 +29,7 @@ const BASH_SUBJECT: DenySubject = Object.freeze({ tool: BASH_TOOL });
 /** Deny-config files for an agent, project first, then user. Only claude-code documents one (D-M3-E2-1). */
 function denyFiles(projectDir: string, agent: AgentId): string[] {
   if (agent !== "claude-code") return [];
-  // D-M3-F-8: the D-M1-T3-1 home rule (HOME, then USERPROFILE), not os.homedir(), which ignores HOME on Windows.
+  // D-M3-F-8: the homeDirOf rule (D-M1-T3-1, D-WIN-HOME-2: USERPROFILE first on win32, HOME first on POSIX).
   const home = homeDirOf(process.env);
   const cfg = process.env[CLAUDE_CONFIG_DIR_ENV];
   const userDir = cfg !== undefined && cfg !== "" ? cfg : home === null ? null : claudeDirOf(process.env, home);

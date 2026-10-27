@@ -395,7 +395,7 @@ export async function runCommand(cmd: Command, args: readonly string[], env: Cli
     return EXIT_USAGE;
   }
   if (f.help) { out(HELP[cmd].trimEnd()); return EXIT_OK; }
-  // D-WIN-HOME-1: the D-M1-T3-1 home rule (HOME, then USERPROFILE), as hooks and server use.
+  // D-WIN-HOME-1, D-WIN-HOME-2: the homeDirOf rule (USERPROFILE first on win32, HOME first on POSIX), as hooks and server use.
   const ctx: SetupContext = { home: homeDirOf(process.env) ?? os.homedir(), pkgDir: env.pkgDir, env: process.env };
   const tty = !!process.stdin.isTTY && !!process.stdout.isTTY;
   const interactive = tty && !f.yes && !f.noInput && !f.json && !f.list && !f.print;

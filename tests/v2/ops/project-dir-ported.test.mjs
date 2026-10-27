@@ -23,7 +23,7 @@ let oldHome;
 before(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "cm-projdir-")));
   oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
   repo = join(root, "repo");
   other = join(root, "other");
   for (const d of [repo, other]) {
@@ -137,6 +137,6 @@ test("the Windows-style plugin path is a plain directory name to v2: it gets no 
 test("compiled-ESM guard (v1 'resolver runs under Node without CommonJS require'): resolve.ts loads and runs as ESM under Node", () => {
   const out = execFileSync(process.execPath, ["--input-type=module", "-e",
     `import { resolveProject } from ${JSON.stringify(new URL("../../../src/core/project/resolve.ts", import.meta.url).href)};` +
-    `console.log(resolveProject("codex", { env: {}, argv: [], cwd: ${JSON.stringify(repo)} }).projectKey);`], { encoding: "utf8", env: { ...process.env, HOME: root } });
+    `console.log(resolveProject("codex", { env: {}, argv: [], cwd: ${JSON.stringify(repo)} }).projectKey);`], { encoding: "utf8", env: { ...process.env, HOME: root, USERPROFILE: root } });
   assert.match(out.trim(), /^[0-9a-f]{16}$/);
 });

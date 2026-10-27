@@ -62,7 +62,7 @@ test("[M2] GP1/no-clientinfo-agent-from-flag", async (t) => {
   execFileSync("git", ["config", "user.name", "t"], { cwd: ws });
   execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "init"], { cwd: ws });
 
-  const env = { ...process.env, HOME: home };
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
   delete env.CLAUDE_PROJECT_DIR;
   const client = spawnBundle(SERVER_BUNDLE, env, ["--agent", "vscode", "--workspace-folder", ws]);
   t.after(() => client.kill());

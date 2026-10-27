@@ -62,7 +62,7 @@ for (const id of Object.keys(SAVING)) {
 test("ADR-0020: gemini AfterTool run_shell_command with a large output is replaced (decision deny + reason)", async (t) => {
   const root = mkdtempSync(path.join(tmpdir(), "cm-saving-"));
   const oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
   t.after(() => { process.env.HOME = oldHome; rmTemp(root); });
   const repo = path.join(root, "repo");
   mkdirSync(path.join(repo, ".git"), { recursive: true });

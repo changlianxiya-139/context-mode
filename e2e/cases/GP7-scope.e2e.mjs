@@ -52,8 +52,8 @@ test("[M1] GP7/worktree-shared-project-key: 2 worktrees of the same repo, 2 sess
     rmSync(wt, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
   });
-  const clientMain = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: main });
-  const clientWt = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: wt });
+  const clientMain = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: main });
+  const clientWt = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: wt });
   t.after(() => {
     clientMain.kill();
     clientWt.kill();
@@ -84,7 +84,7 @@ test("[M1] GP7/vscode-remote-wsl-project-root: ${workspaceFolder} resolves corre
   });
   // #1033: VSCODE_CWD and the spawn cwd point at the install dir (both inside this repo's own git
   // tree); only the --workspace-folder argv names the workspace.
-  const env = { ...process.env, HOME: home, VSCODE_CWD: RELEASE_OUT };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, VSCODE_CWD: RELEASE_OUT };
   delete env.CLAUDE_PROJECT_DIR;
   const client = spawnBundle(SERVER_BUNDLE, env, ["--agent", "vscode", "--workspace-folder", main]);
   t.after(() => client.kill());
@@ -124,7 +124,7 @@ test("[M2] GP7/adapter-root-path-containment: Copilot CLI cwd+--agent reads a fi
   let client;
   let reply;
   try {
-    const env = { ...process.env, HOME: home };
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
     delete env.CLAUDE_PROJECT_DIR;
     client = spawnBundle(SERVER_BUNDLE, env, ["--agent", "copilot-cli"]);
     reply = await client.request("tools/call", {
@@ -148,7 +148,7 @@ test("[M2] GP7/workspace-folder-remote-wsl: a file inside --workspace-folder is 
     rmSync(main, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
   });
-  const env = { ...process.env, HOME: home, VSCODE_CWD: RELEASE_OUT };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, VSCODE_CWD: RELEASE_OUT };
   delete env.CLAUDE_PROJECT_DIR;
   const client = spawnBundle(SERVER_BUNDLE, env, ["--agent", "vscode", "--workspace-folder", main]);
   t.after(() => client.kill());
@@ -193,7 +193,7 @@ test("[M2] GP7/symlink-dot-prefix-containment: a dot-prefixed-name symlink is in
   execFileSync("git", ["add", "-A"], { cwd: main });
   execFileSync("git", ["commit", "-q", "-m", "init"], { cwd: main });
 
-  const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: main };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: main };
   const client = spawnBundle(SERVER_BUNDLE, env);
   t.after(() => client.kill());
   await client.request("initialize", INIT);
@@ -224,7 +224,7 @@ test("[M2] GP7/worktree-containment-consistent: an external worktree is inside c
     rmSync(home, { recursive: true, force: true });
   });
 
-  const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: wt };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: wt };
   const client = spawnBundle(SERVER_BUNDLE, env);
   t.after(() => client.kill());
   await client.request("initialize", INIT);
@@ -260,8 +260,8 @@ test("[M2] GP7/worktree-label-session-first: a project-scope search ranks the ca
     rmSync(home, { recursive: true, force: true });
   });
 
-  const clientMain = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: main });
-  const clientWt = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: wt });
+  const clientMain = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: main });
+  const clientWt = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: wt });
   t.after(() => {
     clientMain.kill();
     clientWt.kill();

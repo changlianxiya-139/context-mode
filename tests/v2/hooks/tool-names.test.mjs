@@ -96,7 +96,7 @@ test("REPLACE_HANDLE_LINE and renderState take the host prefix; the intent is ne
 test("gemini AfterTool `cat big.log`: the deny reason names mcp_context-mode_ctx_search", async (t) => {
   const root = mkdtempSync(path.join(tmpdir(), "cm-names-gem-"));
   const oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
   t.after(() => { process.env.HOME = oldHome; rmTemp(root); });
   const repo = path.join(root, "repo");
   mkdirSync(path.join(repo, ".git"), { recursive: true });

@@ -24,7 +24,7 @@ const FATAL = "FATAL: disk controller failure code=E-7731";
 test("gemini BeforeAgent prompt then AfterTool run_shell_command cat: the deny reason holds the FATAL line", async (t) => {
   const root = mkdtempSync(path.join(tmpdir(), "cm-gem-live-"));
   const oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
   t.after(() => { process.env.HOME = oldHome; rmTemp(root); });
   const repo = path.join(root, "repo");
   mkdirSync(path.join(repo, ".git"), { recursive: true });

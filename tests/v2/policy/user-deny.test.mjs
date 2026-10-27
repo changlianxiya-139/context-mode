@@ -17,7 +17,7 @@ before(() => {
   proj = join(root, "proj");
   mkdirSync(home);
   mkdirSync(proj);
-  process.env.HOME = home;
+  process.env.HOME = home; process.env.USERPROFILE = home;
   delete process.env.CLAUDE_CONFIG_DIR;
 });
 after(() => {
@@ -33,7 +33,7 @@ function fresh(name) {
   const p = join(root, name, "proj");
   mkdirSync(h, { recursive: true });
   mkdirSync(p, { recursive: true });
-  process.env.HOME = h;
+  process.env.HOME = h; process.env.USERPROFILE = h;
   return { h, p };
 }
 function writeSettings(dir, file, body) {
@@ -169,7 +169,7 @@ test("[M3] GP3/v17-read-glob-deny-anchors: Read(//etc/**) matches /etc/hosts -> 
 });
 
 test("[M3] GP3/v17-read-glob-deny-anchors: Read(~/secret/**) matches $HOME/secret/a -> deny", () => {
-  process.env.HOME = home;
+  process.env.HOME = home; process.env.USERPROFILE = home;
   const r = { tool: "Read", projectDir: proj };
   assert.equal(matchesAnyDenyPattern(join(home, "secret", "a"), ["Read(~/secret/**)"], r), "Read(~/secret/**)");
   assert.equal(matchesAnyDenyPattern(join(home, "public", "a"), ["Read(~/secret/**)"], r), null);

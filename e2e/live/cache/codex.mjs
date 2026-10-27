@@ -148,7 +148,7 @@ function mcpCalls(items) { return items.filter((i) => i.type === "mcp_tool_call"
 
 async function runSession({ root, rawRoot, arm, label, authSrc, releaseOut, home }) {
   const h = home ?? makeHome(root, `home-${label}`, arm, authSrc);
-  const env = { ...process.env, HOME: h.home, CODEX_HOME: h.codexHome };
+  const env = { ...process.env, HOME: h.home, USERPROFILE: h.home, CODEX_HOME: h.codexHome };
   const proj = join(root, `proj-${label}`);
   const rawDir = join(rawRoot, label); mkdirSync(rawDir, { recursive: true });
   writeFixtures(proj);
@@ -180,7 +180,7 @@ async function runSession({ root, rawRoot, arm, label, authSrc, releaseOut, home
 async function runCross({ root, rawRoot, arm, authSrc, releaseOut }) {
   const label = `cross-${arm}`;
   const h = makeHome(root, `home-${label}`, arm, authSrc);
-  const env = { ...process.env, HOME: h.home, CODEX_HOME: h.codexHome };
+  const env = { ...process.env, HOME: h.home, USERPROFILE: h.home, CODEX_HOME: h.codexHome };
   const proj = join(root, `proj-${label}`);
   const rawDir = join(rawRoot, label); mkdirSync(rawDir, { recursive: true });
   writeFixtures(proj);

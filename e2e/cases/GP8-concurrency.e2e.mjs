@@ -42,7 +42,7 @@ function fixture(t) {
     rmSync(repo, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
   });
-  const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: repo };
   const spawnOne = () => {
     const c = spawnBundle(SERVER_BUNDLE, env);
     clients.push(c);
@@ -106,7 +106,7 @@ test("[M1] GP8/cleanup-live-owner-kept (V22): a live owner PID + last access > 1
   // A second server for a different project runs its once-per-process sweep (D-M1-11).
   const other = initRepo();
   t.after(() => rmSync(other, { recursive: true, force: true }));
-  const sweeper = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: f.home, CLAUDE_PROJECT_DIR: other });
+  const sweeper = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: f.home, USERPROFILE: f.home, CLAUDE_PROJECT_DIR: other });
   t.after(() => sweeper.kill());
   await sweeper.request("initialize", INIT);
   await sweeper.request("tools/call", { name: "ctx_stats", arguments: {} });

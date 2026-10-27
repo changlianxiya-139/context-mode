@@ -160,7 +160,7 @@ test("prefix: pi system prompt bytes are identical on turns 1..6 of one session"
   mkdirSync(repo, { recursive: true });
   execFileSync("git", ["init", "-q", repo]);
   const oldHome = process.env.HOME;
-  process.env.HOME = path.join(root, "pi-home");
+  process.env.HOME = path.join(root, "pi-home"); process.env.USERPROFILE = path.join(root, "pi-home");
   try {
     const handlers = new Map();
     piExtension({ on: (name, fn) => handlers.set(name, fn), registerTool: () => {} });
@@ -184,7 +184,7 @@ test("prefix: opencode system payload bytes are identical on turns 1..6 of one s
   execFileSync("git", ["init", "-q", repo]);
   const oldHome = process.env.HOME;
   const oldProject = process.env.CLAUDE_PROJECT_DIR;
-  process.env.HOME = path.join(root, "oc-home");
+  process.env.HOME = path.join(root, "oc-home"); process.env.USERPROFILE = path.join(root, "oc-home");
   delete process.env.CLAUDE_PROJECT_DIR;
   try {
     const hooks = await opencodePlugin.setup({ directory: repo, tool: () => {} });

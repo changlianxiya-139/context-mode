@@ -22,7 +22,7 @@ before(() => {
   mkdirSync(repo);
   execFileSync("git", ["init", "-q", repo]);
   oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
 });
 
 after(() => {

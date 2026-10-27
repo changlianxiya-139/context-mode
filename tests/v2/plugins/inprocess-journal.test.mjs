@@ -21,7 +21,7 @@ before(() => {
   execFileSync("git", ["init", "-q", repo]);
   oldHome = process.env.HOME;
   oldProject = process.env.CLAUDE_PROJECT_DIR;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
   delete process.env.CLAUDE_PROJECT_DIR;
 });
 after(() => {

@@ -6,13 +6,21 @@ import { join } from "node:path";
 import { AGENT_HOME_DIR, CLAUDE_CONFIG_DIR_ENV, CODEX_HOME_ENV, DATA_ROOT } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 
-/** D-M1-T3-1: HOME, then USERPROFILE; an empty value counts as unset. null when neither is set (D-M3-F-8). */
-export function homeDirOf(env: NodeJS.ProcessEnv): string | null {
-  const home = env.HOME;
-  if (home !== undefined && home !== "") return home;
-  const profile = env.USERPROFILE;
-  if (profile !== undefined && profile !== "") return profile;
-  return null;
+/** The one home rule. An empty value counts as unset; null when nothing is set (D-M3-F-8).
+ *  POSIX (D-M1-T3-1): HOME, then USERPROFILE.
+ *  win32 (D-WIN-HOME-2): USERPROFILE, then HOMEDRIVE+HOMEPATH, then HOME. Every host CLI is a Node program that takes its
+ *  home from os.homedir(), which is USERPROFILE on Windows and ignores HOME; Git Bash, MSYS and some CI shells set HOME
+ *  to another (often POSIX style) path, so HOME first would write where the host never reads.
+ *  `platform` is a parameter so the rule is tested on every OS. */
+export function homeDirOf(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform): string | null {
+  const set = (v: string | undefined): v is string => v !== undefined && v !== "";
+  if (platform === "win32") {
+    if (set(env.USERPROFILE)) return env.USERPROFILE;
+    if (set(env.HOMEDRIVE) && set(env.HOMEPATH)) return env.HOMEDRIVE + env.HOMEPATH;
+    return set(env.HOME) ? env.HOME : null;
+  }
+  if (set(env.HOME)) return env.HOME;
+  return set(env.USERPROFILE) ? env.USERPROFILE : null;
 }
 
 /** D-N6-CODEX-HOME-2: the dir Codex reads config.toml and hooks.json from: $CODEX_HOME when set and not empty,

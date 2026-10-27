@@ -33,7 +33,7 @@ before(() => {
   home = path.join(root, "home");
   mkdirSync(home);
   oldHome = process.env.HOME;
-  process.env.HOME = home; // resolveConfigDir reads the process env (D-M1-T3-5)
+  process.env.HOME = home; process.env.USERPROFILE = home; // resolveConfigDir reads the process env (D-M1-T3-5)
   env = { HOME: home, PATH: process.env.PATH };
 });
 

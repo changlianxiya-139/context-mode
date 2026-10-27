@@ -35,7 +35,7 @@ before(() => {
   mkdirSync(path.join(repo, "logs"));
   writeFileSync(path.join(repo, "logs", "app.log"), "x".repeat(200_000));
   oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
 });
 after(() => { process.env.HOME = oldHome; rmSync(root, { recursive: true, force: true, maxRetries: 3 }); });
 

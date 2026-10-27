@@ -35,7 +35,7 @@ function bigLog() {
 function sandbox(t) {
   const root = mkdtempSync(path.join(tmpdir(), "cm-live-shape-"));
   const oldHome = process.env.HOME;
-  process.env.HOME = root;
+  process.env.HOME = root; process.env.USERPROFILE = root;
   t.after(() => { process.env.HOME = oldHome; rmTemp(root); });
   const repo = path.join(root, "repo");
   mkdirSync(path.join(repo, ".git"), { recursive: true });
