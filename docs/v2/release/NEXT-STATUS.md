@@ -1,10 +1,10 @@
 # Status of the next channel
 
-Checked 2026-10-27 with `npm view context-mode dist-tags`.
+Checked 2026-10-27 with `npm view context-mode dist-tags --prefer-online`.
 
 ## npm version on next
 
-`next` is 2.0.0-next.6. `latest` is still 1.0.169.
+`next` is 2.0.0-next.7. `latest` is still 1.0.169.
 
 ## How to test it
 
@@ -25,47 +25,46 @@ Claude Code native way:
 
 ## Per agent
 
-This run tested the package on each agent. Bytes are one large tool result (about 200 KB log): without context-mode -> with v2.
+Bytes are one large tool result (about 200 KB log): without context-mode -> with v2.
 "Live" means a real model turn ran. "Doc-verified" means the hook shape was checked, but no model turn ran.
+The Claude Code, Pi and OpenCode rows are from next.6 and were not re-tested for next.7.
 
 | Agent | Pass | Live or doc-verified | Bytes off -> v2 | Problems |
 |---|---|---|---|---|
-| Claude Code | yes | live | 2,312 -> 226 | None reported. |
-| Codex | yes | live | 200,122 -> 439 | In `codex exec`, the ctx_execute call needs approval and fails. The model then ran `rg` on the log. The small number comes from the hook block and the rg output. A later shell read of a large file is not caught. |
-| Gemini CLI | yes | doc-verified | 200,548 -> 381 | No live model turn. Doc URL not fetched. BeforeAgent hook gave no output. |
-| Qwen Code | yes | doc-verified | 228,031 -> 455 | No live session, so hook-seen is WARN. Payload not checked against Qwen docs. |
-| Copilot CLI | yes | doc-verified | 198,216 -> 373 | No live model turn. Answer came from the ctx_execute result. Real tool name not checked. |
-| OpenCode | yes | doc-verified | 200,115 -> 250 | Not installed, so no model call. Doc not fetched. |
-| Pi | yes | doc-verified | 192,021 -> 119 | No live model (needs provider login). Reduction runs in the tool_result hook after the run. The tool_call hook did not block `cat`. |
-| VS Code (Copilot) | no | doc-verified | 206,121 -> 300 | Payload shape assumed. A camelCase hookEventName was rejected. If VS Code sends camelCase, the hook does nothing. |
-| Kiro | no | doc-verified | 200,048 -> 343 | Decoder rejects camelCase preToolUse. Matcher is `shell`, but the decoder only knows `execute_bash`. Redirect may not fire on a real host. |
-| ZCode | no | doc-verified | 240,730 -> 40 | zcode CLI not installed. Payloads come from the decoder, not from docs. |
+| Claude Code (next.6) | yes | live | 2,312 -> 226 | None reported. |
+| Codex | yes | live | 16,596 -> 1,091 | Off figure is the rollout size, cut by codex to 16,399 bytes for the cat call. Full size is 200,013 bytes in the --json stream. Doctor shows WARN hook-seen until one tool call runs. |
+| Gemini CLI | yes | doc-verified | 200,097 -> 168 | No live run, no login. A BeforeAgent payload with a cwd that is not a git repo made the hook print `NO_GIT_DIR` and exit 0. Probably my fake cwd. Hooks may not run outside a git repo. |
+| Qwen Code | no | doc-verified | 207,035 -> 425 | skills/ctx-stats/SKILL.md names two tool names. The host tool is `mcp__context-mode__ctx_stats` only. That breaks one channel. Hook-seen is WARN. |
+| Copilot CLI | yes | doc-verified | 189,670 -> 382 | No live session, no login. Hook-seen is WARN. Setup plus host CLI install took about 3 minutes. |
+| OpenCode (next.6) | yes | doc-verified | 200,115 -> 250 | Not installed, so no model call. Doc not fetched. |
+| Pi (next.6) | yes | doc-verified | 192,021 -> 119 | No live model (needs provider login). The tool_call hook did not block `cat`. |
+| VS Code (Copilot) | yes | doc-verified | 219,930 -> 112 | No output for a PreToolUse `curl` or `cat` payload. hook.mjs maps `run_in_terminal` to Bash but not `runTerminalCommand`. Real name not confirmed. |
+| Kiro | no | doc-verified | 183,414 -> 400 | Kiro CLI not installed. The hook names the tool `mcp_context-mode_ctx_execute`. Kiro docs do not say how a hyphen in the server name is changed. skillOk is false. |
+| ZCode | no | doc-verified | 200,036 -> 436 | ZCode CLI not installed. Documented name is `mcp__<server>__<tool>` and the repo already matches. skillOk is false and the cause is open. |
 
-## Fixes in this run
+## Fixes in this release
 
-- D-RN-ORDER-1: the GitHub release is made after npm publish works. `publish.mjs --github-release` makes it.
-- D-HQ-PERF-2: typo correction reads `chunks_vocab` once per pass. Search profile: full loop p50 4.64 ms. Budget stays 50 ms.
-- D-N5-SKILL-1: home-dir skills use the bare-name skill dir. No doubled tool prefix.
-- D-N5-CODEX-HOME-1: setup writes Codex config, hooks and skills under CODEX_HOME when set.
-- D-N6-CODEX-HOME-2: doctor reads Codex config.toml and hooks.json under CODEX_HOME when set.
-- D-N6-CODEX-DIRECT-1: setup writes `omit_tools_from = ["deferred"]`, so Codex gives the ctx tools as direct tools. Earlier live check (codex 0.156.1): tool output 16,611 B off, 1,246 B v2.
-- D-HA-GEMINI-DUMP-1: Gemini now denies `cat` on a large file before it runs.
-- CI fix 3374b3ce: a Windows path assertion in the npm-package test.
+- VS Code: the decoder (src/adapters/vscode.ts) now reads the camelCase payload. It no longer fails silently. Docs show both snake_case and camelCase shapes and name no VS Code version.
+- Kiro: the decoder and tool names now match the Kiro docs (PascalCase event names). The skill text is not confirmed, because the MCP name for a hyphen server is not documented.
+- ZCode: no behaviour change. The prefix already equals the documented name. The new test was green on first run, so it did not go red. No code bug found behind skillOk=false.
+- Codex: setup now writes `default_tools_approval_mode = "approve"` in `[mcp_servers.context-mode]`, next to `omit_tools_from`. The live run on codex 0.156.1 accepted it. `codex mcp list` showed the entry enabled.
 
 ## Gate and release numbers
 
-- Gate on head 803c8e68: `gate --all` exit 0. v2-unit 1676 pass, 0 fail, 5 skip. Live 0 of 30 skipped (step mode).
-- Release: 2.0.0-next.6 published with provenance. Attempt 1 failed on one Windows grandchild-kill test (1 alive). A rerun passed.
+- Gate on head 397cc04b: `gate --all` exit 0. v2-unit 1690 pass, 0 fail, 5 skip of 1695. Live 0 of 30 ran (no case covers the changed files, ADR-0012). Fix rounds: 0.
+- Release: 2.0.0-next.7 published from head f61b6973 with tag `next` and provenance. GitHub release v2.0.0-next.7 is a prerelease. `latest` stays 1.0.169.
 
 ## Open items
 
-- Live arms: 0 of 30 ran in the gate, because step mode finds no case for files changed since base.
-- Windows grandchild-kill test failed once in the release run and passed on rerun. Root cause not yet found.
-- Codex: `codex exec` needs approval for the ctx MCP tool. A large shell read is not caught.
-- Kiro: check camelCase event names and the `shell` matcher against the real host.
-- VS Code: check event name casing on a real host.
-- Gemini: deny reason search query is the raw command text. No live run.
-- Copilot CLI and ZCode: tool name forms not verified on a real host.
+- Live arms: 0 of 30 ran in the gate, because no case covers the changed files.
+- Windows grandchild-kill test failed once in the next.6 release run and passed on rerun. Root cause not found.
+- ZCode: skillOk=false on next.6 and next.7. Cause open. Needs a real host.
+- Kiro: MCP tool name for a hyphen server is not confirmed. Needs a real host.
+- VS Code: confirm whether the real tool name is `run_in_terminal` or `runTerminalCommand`.
+- Qwen: ctx-stats skill names two tool names. Keep only `mcp__context-mode__ctx_stats`.
+- Gemini: check that hooks work outside a git repo.
+- Copilot CLI: tool name form not verified on a real host.
+- Codex: a large shell read is not caught in `codex exec`.
 - Eight agents have no live model session.
 - Hosts not installed: Kiro, ZCode, OpenCode.
 - GitHub prerelease v2.0.0-next.4 has no npm package.
