@@ -10,6 +10,7 @@ import path from "node:path";
 import * as clack from "@clack/prompts";
 import { ADAPTERS } from "../adapters/table.ts";
 import type { AgentId } from "../core/contracts/agents.ts";
+import { homeDirOf } from "../core/project/config-dir.ts";
 import { buildRegistry, detectAgents, printPlan, printText, runDoctor, runRemove, runSetup, STATE_DIR } from "../setup/index.ts";
 import type { AgentResult, SetupContext, SetupResult } from "../setup/index.ts";
 import { HELP, parseFlags, UsageError, type Command, type Flags } from "./args.ts";
@@ -394,7 +395,8 @@ export async function runCommand(cmd: Command, args: readonly string[], env: Cli
     return EXIT_USAGE;
   }
   if (f.help) { out(HELP[cmd].trimEnd()); return EXIT_OK; }
-  const ctx: SetupContext = { home: process.env.HOME || os.homedir(), pkgDir: env.pkgDir, env: process.env };
+  // D-WIN-HOME-1: the D-M1-T3-1 home rule (HOME, then USERPROFILE), as hooks and server use.
+  const ctx: SetupContext = { home: homeDirOf(process.env) ?? os.homedir(), pkgDir: env.pkgDir, env: process.env };
   const tty = !!process.stdin.isTTY && !!process.stdout.isTTY;
   const interactive = tty && !f.yes && !f.noInput && !f.json && !f.list && !f.print;
   // A pty may report 0 columns; clack would then wrap every character onto its own line. Fall back to 80.

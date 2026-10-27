@@ -227,6 +227,16 @@ test("[M7] cli/json: --json writes only one JSON document to stdout", (t) => {
   assert.equal(j.agents[0].status, "PASS");
 });
 
+test("[WIN] cli/home-rule: setup uses the D-M1-T3-1 home rule (HOME, then USERPROFILE), the same as hooks and server (D-WIN-HOME-1)", (t) => {
+  const s = sandbox(t);
+  codexHome(s);
+  const env = { ...s.env, USERPROFILE: s.home };
+  delete env.HOME; // a Windows shell with no HOME: the profile dir is the only home
+  const r = spawnSync(process.execPath, [path.join(s.pkg, "cli.mjs"), "setup", "--dry-run", "--agents", "codex"], { encoding: "utf8", timeout: 60_000, env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes(path.join(s.home, ".codex", "config.toml")), `plan must edit ${s.home}/.codex/config.toml, got:\n${r.stdout}`);
+});
+
 test("[M7] cli/dry-run: setup --dry-run shows the plan and writes nothing", (t) => {
   const s = sandbox(t);
   codexHome(s);
