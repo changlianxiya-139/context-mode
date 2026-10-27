@@ -3,6 +3,7 @@ Manual setup for codex. Put this in <HOME>/.codex/config.toml
 and keep the rest. These paths are for this machine.)
 
 [mcp_servers.context-mode]
+omit_tools_from = ["deferred"]
 command = "<NODE>"
 args = ["<PKG>/server.mjs", "--agent", "codex"]
 

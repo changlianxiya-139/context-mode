@@ -2,7 +2,7 @@
 // Spec: docs/v2/impl/07-tools-ops.md §5 D3, D4, D5b; DEVIATIONS D-M5-arch-3, D-M5-D2-1..4.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -33,7 +33,7 @@ function codexInstall(home, opts = {}) {
   put(path.join(codexDir, "hooks.json"), { hooks });
   // JSON string escapes are TOML basic-string escapes: a Windows path keeps its backslashes (D-M3-F-9 rule).
   const serverArgs = JSON.stringify([path.join(path.dirname(process.argv[1] ?? ""), "server.mjs"), "--agent", "codex"]);
-  put(path.join(codexDir, "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\n`);
+  put(path.join(codexDir, "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\nomit_tools_from = ["deferred"]\n`);
   return row;
 }
 
@@ -171,4 +171,13 @@ test("[M7] doctor-config/D3-pi-missing-package-FAIL-names-the-file-read", (t) =>
   assert.ok(d3.detail.startsWith("wrong: MCP entry"), d3.detail);
   assert.ok(d3.detail.includes(path.join(custom, "settings.json")), d3.detail);
   assert.equal(d3.fixCommand, "run ctx_upgrade");
+});
+
+test("[D-N6-CODEX-DIRECT-1] doctor-config/D3 names the MCP entry when the codex entry lacks omit_tools_from deferred", (t) => {
+  const home = tmp(t);
+  const row = codexInstall(home);
+  const file = path.join(home, ".codex", "config.toml");
+  const text = readFileSync(file, "utf8");
+  put(file, text.split('omit_tools_from = ["deferred"]\n').join(""));
+  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry");
 });
