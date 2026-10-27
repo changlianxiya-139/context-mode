@@ -7,7 +7,7 @@ import { join } from "node:path";
 import {
   AGENT_ARG, AGENT_HOME_DIR, CODEX_FEATURES_HOOKS_KEY, CONFIG_TOML_FILE, D3_DETAIL, D3_PARTS, D4_REASON_JOIN,
   D5B_DETAIL, D5B_FIX, DOCTOR_FIX_UPGRADE, DOCTOR_LABEL, DOCTOR_PASS_DETAIL, HOOK_COMMAND_FIELD, HOOK_COMMAND_SEP,
-  HOOK_ENTRY_FILE, HOOK_GROUP_HOOKS_FIELD, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND,
+  HOOK_ENTRY_FILE, HOOK_GROUP_HOOKS_FIELD, HOOKS_JSON_FILE, HOOK_HOST_FILE, HOOK_MATCHER_FIELD, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND,
   HOOKS_KEY, MCP_ANY_MATCH, POST_TOOL_USE, KIRO_ACTION_FIELD, KIRO_TOOL_MATCHERS, KIRO_TRIGGER_FIELD, MATCHER_ALT, MATCHER_ANY, MATCHER_CLOSE, MATCHER_OPEN,
   OPENCODE_BASE_CONFIG_FILE, OWN_MCP_ENTRY, OWN_TOOL_PREFIX, PI_AGENT_DIR, PI_AGENT_DIR_ENV, REGEX_ESCAPE,
   REGEX_SPECIAL_CHARS, SETTINGS_FILE, SHELL_QUOTE, TOOL_HOOK_EVENTS, V1_PATH_SEPS, VSCODE_CLAUDE_HOOKS_SETTING,
@@ -15,7 +15,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, AgentId, DoctorRow } from "../contracts/types.ts";
 import { hasReplace } from "../../adapters/table.ts";
-import { homeDirOf } from "../project/config-dir.ts";
+import { codexDirOf, homeDirOf } from "../project/config-dir.ts";
 import { detectV1, type V1Scope } from "./detect-v1.ts";
 import { hostConfigValueAt, mergeOwnEntries, parseHostConfig, readHostConfig } from "./host-config.ts";
 import { resolvePluginRoot } from "./plugin-root.ts";
@@ -97,6 +97,7 @@ const validTimeout = (v: unknown): boolean => typeof v === "number" && Number.is
 // The host config file that holds the MCP entry (or the in-process plugin/package list), D-M5-O1-4.
 function mcpFile(row: AdapterRow, home: string, env: NodeJS.ProcessEnv): string | null {
   const spec = OWN_MCP_ENTRY[row.id];
+  if (row.id === "codex") return join(codexDirOf(env, home), CONFIG_TOML_FILE); // D-N6-CODEX-HOME-2
   if (spec !== undefined) return join(home, ...spec.file);
   if (row.id === "opencode") return join(home, ...AGENT_HOME_DIR.opencode, OPENCODE_BASE_CONFIG_FILE);
   if (row.id === "pi") {
@@ -127,9 +128,10 @@ function hookParts(row: AdapterRow, home: string, env: NodeJS.ProcessEnv, worktr
   let block: unknown;
   try {
     const root = spec.root === "plugin" ? resolvePluginRoot(row, env) : spec.root === "home" ? home : worktree;
-    block = hostConfigValueAt(readParsed(row.id, join(root, ...spec.file)).value, spec.key);
+    const file = row.id === "codex" ? join(codexDirOf(env, home), HOOKS_JSON_FILE) : join(root, ...spec.file); // D-N6-CODEX-HOME-2
+    block = hostConfigValueAt(readParsed(row.id, file).value, spec.key);
     if (row.id === "codex") {
-      const config = readParsed(row.id, join(home, ...AGENT_HOME_DIR.codex, CONFIG_TOML_FILE)).value;
+      const config = readParsed(row.id, join(codexDirOf(env, home), CONFIG_TOML_FILE)).value;
       if (hostConfigValueAt(config, CODEX_FEATURES_HOOKS_KEY) === false) return [PART_HOOKS]; // no key = true (#1152)
     }
   } catch {

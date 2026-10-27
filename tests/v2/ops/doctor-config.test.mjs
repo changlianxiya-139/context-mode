@@ -21,6 +21,7 @@ const put = (file, value) => {
 
 // A Codex install as ctx_upgrade + the release hook file would leave it.
 function codexInstall(home, opts = {}) {
+  const codexDir = opts.codexDir ?? path.join(home, ".codex");
   const row = getAdapter("codex");
   const cmd = "node /opt/cm/hook.mjs --agent codex";
   const hooks = {};
@@ -29,10 +30,10 @@ function codexInstall(home, opts = {}) {
     if (canonical === "PreToolUse" || canonical === "PostToolUse") group.matcher = opts.matcher ?? composeMatcher(row, canonical);
     hooks[native] = [group];
   }
-  put(path.join(home, ".codex", "hooks.json"), { hooks });
+  put(path.join(codexDir, "hooks.json"), { hooks });
   // JSON string escapes are TOML basic-string escapes: a Windows path keeps its backslashes (D-M3-F-9 rule).
   const serverArgs = JSON.stringify([path.join(path.dirname(process.argv[1] ?? ""), "server.mjs"), "--agent", "codex"]);
-  put(path.join(home, ".codex", "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\n`);
+  put(path.join(codexDir, "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\n`);
   return row;
 }
 
@@ -84,6 +85,17 @@ test("[M5] doctor-config/user-hook-timeout-kept: a user-set timeout is a valid v
   const home = tmp(t);
   const row = codexInstall(home, { timeout: 45 });
   assert.equal(checkHostConfig(row, { HOME: home }, home).status, "PASS");
+});
+
+test("[D-N6-CODEX-HOME-2] doctor-config/D3 reads codex config.toml and hooks.json from CODEX_HOME when it is set", (t) => {
+  const home = tmp(t);
+  const codexDir = path.join(tmp(t), "codex-home");
+  const row = codexInstall(home, { codexDir });
+  assert.equal(checkHostConfig(row, { HOME: home, CODEX_HOME: codexDir }, home).status, "PASS");
+  assert.equal(checkHostConfig(row, { HOME: home }, home).detail, "wrong: MCP entry, hook entries");
+  codexInstall(home, { codexDir, features: "[features]\nhooks = false\n" });
+  assert.equal(checkHostConfig(row, { HOME: home, CODEX_HOME: codexDir }, home).detail, "wrong: hook entries");
+  assert.equal(checkHostConfig(row, { HOME: home, CODEX_HOME: "" }, home).detail, "wrong: MCP entry, hook entries");
 });
 
 test("[M5] doctor-config/D3-empty-home-names-all-three-parts-for-codex", (t) => {

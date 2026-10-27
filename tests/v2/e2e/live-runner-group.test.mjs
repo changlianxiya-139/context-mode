@@ -16,6 +16,7 @@ const RUNNERS = [
   "bench/live/run.mjs",
   "bench/live/ab-quick.mjs",
   "bench/saving-score.mjs",
+  "e2e/live/npm-package/claude-code.mjs",
 ];
 
 function alive(pid) {

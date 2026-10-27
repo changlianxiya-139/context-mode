@@ -7,7 +7,7 @@ import { basename, dirname, join } from "node:path";
 import { z } from "zod/v4";
 import { getAdapter } from "../../adapters/table.ts";
 import {
-  AGENT_HOME_DIR, DOCTOR_CHECK_ORDER, DOCTOR_LABEL, OWNER_PID_EXT, OWNERS_DIR_NAME, PI_AGENT_DIR_ENV,
+  DOCTOR_CHECK_ORDER, DOCTOR_LABEL, OWNER_PID_EXT, OWNERS_DIR_NAME, PI_AGENT_DIR_ENV,
   PROJECTS_DIR_NAME, REPORT_ENV_ENUMS, BUNDLE_SHA,
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
@@ -20,7 +20,7 @@ import { checkMcp, checkMode, checkNode, checkProject, checkVersion } from "../o
 import { checkHookRoundTrip } from "../ops/doctor-hook.ts";
 import { healD8 } from "../ops/db-heal.ts";
 import { buildReport } from "../ops/report.ts";
-import { homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
+import { codexDirOf, homeDirOf, resolveConfigDir } from "../project/config-dir.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
 import { closeDb, openDb } from "../store/db.ts";
 
@@ -74,7 +74,7 @@ async function hookRow(ctx: ToolContext, adapter: AdapterRow, host: DoctorHost):
       bundleDir: host.bundleDir,
       env: buildChildEnv(host.env),
       signal: ctx.signal,
-      codexConfigDir: join(needHome(host.env), ...AGENT_HOME_DIR.codex), // same Codex dir D3 reads
+      codexConfigDir: codexDirOf(host.env, needHome(host.env)), // same Codex dir D3 reads (D-N6-CODEX-HOME-2)
       db,
     });
   } finally {

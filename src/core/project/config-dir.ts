@@ -3,7 +3,7 @@
 // D-CI-PERF-3: node:fs through getBuiltinModule; a static ESM import of node:fs also loads fs/promises, readline and streams.
 const { mkdirSync, realpathSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
 import { join } from "node:path";
-import { DATA_ROOT } from "../contracts/constants.ts";
+import { AGENT_HOME_DIR, CODEX_HOME_ENV, DATA_ROOT } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 
 /** D-M1-T3-1: HOME, then USERPROFILE; an empty value counts as unset. null when neither is set (D-M3-F-8). */
@@ -13,6 +13,13 @@ export function homeDirOf(env: NodeJS.ProcessEnv): string | null {
   const profile = env.USERPROFILE;
   if (profile !== undefined && profile !== "") return profile;
   return null;
+}
+
+/** D-N6-CODEX-HOME-2: the dir Codex reads config.toml and hooks.json from: $CODEX_HOME when set and not empty,
+ *  else <home>/.codex. Same rule as setup's agentPath (D-N5-CODEX-HOME-1). */
+export function codexDirOf(env: NodeJS.ProcessEnv, home: string): string {
+  const dir = env[CODEX_HOME_ENV];
+  return dir !== undefined && dir !== "" ? dir : join(home, ...AGENT_HOME_DIR.codex);
 }
 
 function homeOf(env: NodeJS.ProcessEnv): string {
