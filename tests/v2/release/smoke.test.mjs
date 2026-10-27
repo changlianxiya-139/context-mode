@@ -144,7 +144,54 @@ test("[RN] release/smoke: on Windows gemini is the npm gemini.cmd shim; smoke ru
   assert.equal(r.status, 0, r.err);
   assert.ok(r.out.startsWith("gemini: PASS: "), r.out);
   assert.deepEqual(JSON.parse(readFileSync(path.join(fx.tmp, "probe-gemini.json"), "utf8")),
-    ["extensions", "install", fx.repo, "--ref", "release-staging", "--auto-update"]);
+    ["extensions", "install", fx.repo, "--ref", "release-staging", "--auto-update", "--consent", "--skip-settings"]);
+});
+
+// D-RN-GEM-1: v2.0.0-next.2 smoke (ubuntu/macos) hung 20 min on the gemini step. gemini 0.65 relaunches itself as a
+// child node process (stdio inherited, so the child holds smoke's pipes) and, without --consent, the child asks
+// "workspace ... is not trusted ... Do you want to continue? [Y/n]" and waits. This stub does the same: the
+// relaunched child records its argv, passes on --consent, and otherwise waits (bounded, so no process is left behind).
+const geminiRelaunch = (childBody) => `const cp = require("child_process"), fs = require("fs"), path = require("path");
+const a = process.argv.slice(2);
+if (!process.env.STUB_GEMINI_CHILD) {
+  const c = cp.spawn(process.execPath, [__filename, ...a], { stdio: "inherit", env: { ...process.env, STUB_GEMINI_CHILD: "1" } });
+  c.on("exit", (code) => process.exit(code ?? 1));
+} else { ${childBody} }`;
+const GEMINI_065 = geminiRelaunch(`fs.writeFileSync(path.join(process.env.TMPDIR, "probe-gemini.json"), JSON.stringify(a));
+  if (a.includes("--consent")) { process.stdout.write('Extension "context-mode" installed successfully and enabled.\\n'); process.exit(0); }
+  process.stdout.write("The current workspace is not trusted. Do you want to continue? [Y/n]: ");
+  setTimeout(() => process.exit(1), 20000);`);
+const GEMINI_HANG = geminiRelaunch(`setTimeout(() => process.exit(1), 20000);`);
+
+function geminiStub(fx, src) {
+  writeFileSync(path.join(fx.root, "bin", "gemini"), `#!${process.execPath}\n${src}\n`);
+  chmodSync(path.join(fx.root, "bin", "gemini"), 0o755);
+}
+
+test("[RN] release/smoke: gemini install runs with --consent and --skip-settings, so no trust prompt waits (D-RN-GEM-1)", { skip: !POSIX }, (t) => {
+  const fx = fixture(t);
+  geminiStub(fx, GEMINI_065);
+  const t0 = Date.now();
+  const r = smoke(fx, "--ref", "release-staging", "--agent", "gemini", "--repo", fx.repo);
+  assert.equal(r.status, 0, r.err);
+  assert.equal(r.out, `gemini: PASS: gemini extensions install ${fx.repo} --ref release-staging passed\n`);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(fx.tmp, "probe-gemini.json"), "utf8")),
+    ["extensions", "install", fx.repo, "--ref", "release-staging", "--auto-update", "--consent", "--skip-settings"]);
+  assert.ok(Date.now() - t0 < 15000, `smoke took ${Date.now() - t0} ms`);
+  assert.deepEqual(smokeHomes(fx), [], "throwaway HOME removed");
+});
+
+test("[RN] release/smoke: a step whose relaunched child holds the pipes still stops at the step timeout (D-RN-GEM-1)", { skip: !POSIX }, (t) => {
+  const fx = fixture(t);
+  geminiStub(fx, GEMINI_HANG);
+  fx.env = { CONTEXT_MODE_SMOKE_TIMEOUT_MS: "1000" };
+  const t0 = Date.now();
+  const r = smoke(fx, "--ref", "release-staging", "--agent", "gemini", "--repo", fx.repo);
+  const ms = Date.now() - t0;
+  assert.equal(r.status, 0, r.err);
+  assert.equal(r.out, "gemini: SKIPPED: gemini not available\n");
+  assert.ok(ms < 10000, `smoke took ${ms} ms; the 1000 ms step timeout did not hold`);
+  assert.deepEqual(smokeHomes(fx), [], "throwaway HOME removed");
 });
 
 test("[M6] release/smoke: codex FAIL when the installed server does not answer as context-mode", { skip: !POSIX }, (t) => {

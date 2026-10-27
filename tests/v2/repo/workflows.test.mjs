@@ -66,3 +66,15 @@ test("ci.yml: windows-only T-F5 step runs the check (DECISIONS-r9 F5)", () => {
   assert.ok(step.includes("if: runner.os == 'Windows'"), step);
   assert.ok(step.includes("T-F5"), step);
 });
+
+// D-RN-GEM-1: v2.0.0-next.2 smoke hung on the gemini step until the 20-minute job timeout cancelled the job, so
+// continue-on-error never applied. The tier-2 gemini step has its own short timeout.
+test("release.yml: the tier-2 gemini smoke step has its own timeout under the job timeout (D-RN-GEM-1)", () => {
+  const l = lines(read(".github/workflows/release.yml"));
+  const g = l.indexOf("- run: node scripts/release/smoke.mjs --ref release-staging --agent gemini");
+  assert.ok(g > 0);
+  const step = [];
+  for (let i = g + 1; i < l.length && !l[i].startsWith("- ") && !l[i].endsWith(":"); i++) step.push(l[i]);
+  assert.ok(step.includes("timeout-minutes: 5"), step.join(" | "));
+  assert.ok(step.some((x) => x.startsWith("continue-on-error: true")), step.join(" | "));
+});
