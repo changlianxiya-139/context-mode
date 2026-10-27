@@ -207,6 +207,7 @@ test("package.json is the D1 npm shape: name, version, bin, type, engines, files
     files: D1_FILES,
     name: "context-mode",
     pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
+    repository: { type: "git", url: "git+https://github.com/mksglu/context-mode.git" },
     type: "module",
     version: "2.0.0",
   });
@@ -217,6 +218,7 @@ test("assertOutPackageJson throws on dependencies, scripts, private or any other
   const ok = {
     name: "context-mode", version: "2.0.0", type: "module", bin: { "context-mode": "cli.mjs" }, engines: { node: ">=24.15.0" },
     files: D1_FILES, pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
+    repository: { type: "git", url: "git+https://github.com/mksglu/context-mode.git" },
   };
   assert.doesNotThrow(() => assertOutPackageJson(ok));
   assert.throws(() => assertOutPackageJson({ ...ok, dependencies: { "better-sqlite3": "1.0.0" } }), /dependencies/);
@@ -228,7 +230,10 @@ test("assertOutPackageJson throws on dependencies, scripts, private or any other
   assert.throws(() => assertOutPackageJson({ ...ok, engines: { node: ">=22.5.0" } }), /engines/);
   assert.throws(() => assertOutPackageJson({ ...ok, files: D1_FILES.slice(1) }), /files/);
   assert.throws(() => assertOutPackageJson({ ...ok, pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"], prompts: [] } }), /pi/);
-  for (const key of ["pi", "bin", "engines", "files"]) {
+  // D-RN-REPO-1: npm provenance (E422) needs repository.url to name the source repo; npm pkg fix form, so it stays a no-op.
+  assert.throws(() => assertOutPackageJson({ ...ok, repository: { type: "git", url: "" } }), /repository/);
+  assert.throws(() => assertOutPackageJson({ ...ok, repository: { type: "git", url: "https://github.com/mksglu/context-mode" } }), /repository/);
+  for (const key of ["pi", "bin", "engines", "files", "repository"]) {
     const { [key]: _drop, ...missing } = ok;
     assert.throws(() => assertOutPackageJson(missing), new RegExp(key));
   }
