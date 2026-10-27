@@ -152,6 +152,57 @@ export function checkSimplePages(pages) {
   return bad;
 }
 
+/** Hosts whose own native command installs context-mode (ADR-0023). Other hosts open with the npm fallback. */
+export const NATIVE_HOSTS = Object.freeze(["claude-code", "codex", "gemini", "qwen", "pi", "opencode"]);
+export const NEXT_LINE = "`next` is the v2 prerelease tag";
+export const CHECK_LINE = "Check: `context-mode doctor`";
+const UPDATE_WORDS = ["update", "upgrade", "--force"];
+
+/** The lines of every fence in `text`, one array per fence (trimmed, empty lines dropped). */
+export function fencedBlocks(text) {
+  const blocks = [];
+  let cur = null;
+  let fence = "";
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (cur === null) {
+      if (t.startsWith("```")) { fence = "```"; cur = []; }
+    } else if (t.startsWith(fence)) { blocks.push(cur); cur = null; }
+    else if (t !== "") cur.push(t);
+  }
+  return blocks;
+}
+
+/** The "## Install" section of a page: from its heading to the next "## " heading. */
+export function installSection(text) {
+  const start = text.indexOf("\n## Install\n");
+  if (start < 0) return "";
+  const rest = text.slice(start + 1);
+  const end = rest.indexOf("\n## ", 3);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+/** ADR-0023 page rules: a native host opens with its own command and then its update command; every page has the check line and the next line. */
+export function checkNativePages(pages) {
+  const bad = [];
+  for (const [name, text] of Object.entries(pages)) {
+    const base = path.basename(name);
+    if (base === "README.md") continue;
+    const id = base.replace(".md", "");
+    const install = installSection(text);
+    const blocks = fencedBlocks(install);
+    const first = blocks[0]?.[0] ?? "";
+    const second = blocks[1]?.[0] ?? "";
+    if (NATIVE_HOSTS.includes(id)) {
+      if (first.startsWith("npm i -g context-mode")) bad.push(`${name} first block is the npm route; a native host opens with its own command`);
+      if (!UPDATE_WORDS.some((w) => second.includes(w))) bad.push(`${name} needs an update block (the native update command) right after the install block`);
+    } else if (second !== "context-mode upgrade") bad.push(`${name} needs a context-mode upgrade block right after the install block`);
+    if (!install.includes(CHECK_LINE)) bad.push(`${name} needs ${CHECK_LINE}`);
+    if (!install.includes(NEXT_LINE)) bad.push(`${name} needs the next-tag line: ${NEXT_LINE}`);
+  }
+  return bad;
+}
+
 const V1_WORD = /\bv1\b/i;
 /** Lines of `text` that hold the word v1 (any case; v10, ev1 and @1 do not match). */
 export function checkNoV1(name, text) {
@@ -196,6 +247,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const pages = Object.fromEntries(readdirSync(DIR).filter((f) => f.endsWith(".md")).map((f) => [f, readFileSync(path.join(DIR, f), "utf8")]));
     pages["../../README.md"] = readFileSync(readme, "utf8"); // root README: same two-command rule
     bad.push(...checkSimplePages(pages));
+    bad.push(...checkNativePages(pages));
   }
   for (const b of bad) console.log("  " + b);
   console.log(`${bad.length ? "FAIL" : "PASS"} install-docs ${files.length} files`);
