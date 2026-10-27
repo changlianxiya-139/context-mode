@@ -111,3 +111,26 @@ jobs:
         name: src/prompt/_generated.ts
       - run: node --test e2e/cases/GP-SETUP-npm-install.e2e.mjs
         name: GP-SETUP npm pack, global install, setup twice, remove byte for byte
+
+  # Windows host proof (docs/v2/review/windows-all.workflow.js): npm pack -> npm i -g under a prefix with a space, install each
+  # host CLI npm can install without login, then per agent: setup, doctor, the 200 KB shell-cat hook payload piped into the
+  # registered hook command, and an MCP initialize + tools/list from the host config. No key, no login.
+  windows-hosts:
+    name: windows hosts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - run: npm install --no-package-lock
+        name: dev tooling (npm is dev-only, never shipped)
+      - run: node build/build.mjs --generated-only
+        name: src/prompt/_generated.ts
+      - run: node e2e/checks/windows-hosts.mjs
+        name: 10 agents x setup, doctor, hook, MCP handshake from the packed package
