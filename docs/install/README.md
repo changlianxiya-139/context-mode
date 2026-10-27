@@ -102,6 +102,23 @@ context-mode --version
 
 Then run `context-mode setup` as above. `context-mode --version` must print a version. If it does not, see [Troubleshooting](#troubleshooting).
 
+## Updating
+
+```sh
+context-mode upgrade
+```
+
+`upgrade` installs the newest version on the tag you are on (`next` for a `-next` version), then runs `setup --repair`. Add `--tag <tag>` to pick a tag. Restart your agent after it.
+
+If you update with npm yourself (`npm i -g context-mode@next`), most agents need nothing more: they run the npm files. Per agent:
+
+| Agent | After `npm i -g` |
+|---|---|
+| Claude Code | Claude Code runs its own copy of the plugin. Run `context-mode setup --repair`, or `claude plugin update context-mode@context-mode`. `context-mode doctor` fails with this fix line while the copy is old. |
+| Codex, Copilot CLI, Gemini CLI, Kiro, OpenCode, Pi, Qwen Code, VS Code, Z Code | Nothing. Restart the agent. |
+
+Run `context-mode doctor` to check. It changes nothing.
+
 ## Uninstall
 
 ```sh
