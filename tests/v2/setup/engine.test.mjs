@@ -471,3 +471,32 @@ exit 0`);
   assert.match(res.agents[0].reason, /^copy: Claude Code runs context-mode 1\.9\.0, the installed package is 2\.0\.0/);
   assert.equal(JSON.parse(readFileSync(ip, "utf8")).plugins["context-mode@context-mode"][0].version, "1.9.0");
 });
+
+// D-NI-CODEX-DOCTOR-1 (ADR-0023): `codex plugin add context-mode@context-mode` installs the npm package as a Codex plugin.
+// The plugin ships the MCP server, hooks (.codex-plugin) and skills (codex/skills); setup writes nothing under ~/.codex.
+// Live run (codex-cli 0.156.1, temp HOME): codex plugin list showed "installed, enabled", doctor said "not set up".
+const CODEX_PLUGIN_FAKE = (status) => `case "$1 $2" in
+  "plugin list") printf 'PLUGIN                     STATUS              VERSION  SOURCE\\ncontext-mode@context-mode  ${status}  2.0.0    /x\\n' ;;
+  "mcp list") echo "context-mode  node  ./server.mjs --agent codex  enabled" ;;
+esac
+exit 0`;
+
+test("[D-NI-CODEX-DOCTOR-1] doctor: a native codex plugin install passes with no ~/.codex setup files", { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+  const s = sandbox(t);
+  cpSync(path.join(import.meta.dirname, "..", "..", "..", "skills"), path.join(s.pkgDir, "codex", "skills"), { recursive: true });
+  fakeBin(s.root, "codex", CODEX_PLUGIN_FAKE("installed, enabled"));
+  const doc = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["codex"] });
+  assert.equal(doc.agents[0].status, "PASS", JSON.stringify(doc.agents[0], null, 2));
+  const names = doc.agents[0].checks.filter((c) => c.ok).map((c) => c.name);
+  for (const n of ["list", "mcp", "hook-registered", "hook-runs", "skills"]) assert.ok(names.includes(n), `${n}: ${JSON.stringify(doc.agents[0].checks)}`);
+  assert.equal(existsSync(path.join(s.home, ".codex", "config.toml")), false, "doctor writes nothing");
+});
+
+test("[D-NI-CODEX-DOCTOR-1] doctor: a disabled codex plugin is still not set up", { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+  const s = sandbox(t);
+  cpSync(path.join(import.meta.dirname, "..", "..", "..", "skills"), path.join(s.pkgDir, "codex", "skills"), { recursive: true });
+  fakeBin(s.root, "codex", CODEX_PLUGIN_FAKE("installed, disabled"));
+  const doc = await runDoctor({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["codex"] });
+  assert.equal(doc.agents[0].status, "FAIL");
+  assert.equal(doc.agents[0].reason, "not set up, run context-mode setup");
+});
