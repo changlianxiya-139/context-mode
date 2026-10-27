@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 import { ADAPTERS } from "../../../src/adapters/table.ts";
 import { TOOL_ORDER } from "../../../src/core/contracts/constants.ts";
 import { buildRegistry, renderSkill } from "../../../src/setup/registry.ts";
+import { denyMessage } from "../../../src/core/policy/decide.ts";
+import { COMPACT_POINTER_LINE, prefixToolNames } from "../../../src/core/contracts/constants.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKILLS = ["ctx-doctor", "ctx-stats", "ctx-upgrade"];
@@ -82,8 +84,8 @@ const CTX_STATS_NAME = {
   codex: "mcp__context_mode__ctx_stats",
   gemini: "mcp_context-mode_ctx_stats or mcp__context-mode__ctx_stats", // D-HQ-SKILLS-3: gemini and qwen share <extension>/skills
   qwen: "mcp_context-mode_ctx_stats or mcp__context-mode__ctx_stats",
-  "copilot-cli": "context-mode-ctx_stats or mcp_context-mode_ctx_stats",
-  vscode: "context-mode-ctx_stats or mcp_context-mode_ctx_stats",
+  "copilot-cli": "context-mode-ctx_stats", // D-HQ-COPILOT-NAMES-3: one name, Copilot CLI 1.0.103 lists MCP tools <server>-<tool>
+  vscode: "mcp_context-mode_ctx_stats",
   kiro: "mcp_context-mode_ctx_stats",
   zcode: "mcp__context-mode__ctx_stats",
   pi: "ctx_stats",
@@ -116,4 +118,34 @@ test("[D-HQ-SKILLS-3] gemini and qwen both load <extension>/skills, so that dir 
     }
     assert.equal(rest.includes("ctx_"), false, `${name} names a tool that is neither gemini's nor qwen's: ${rest}`);
   }
+});
+
+// D-HQ-COPILOT-NAMES-3 (2.0.0-next.5): the copilot-cli ctx-stats skill hedged between two tool names, because copilot-cli and
+// vscode wrote one shared ~/.copilot/skills. Copilot CLI 1.0.103 (runtime.node strings "github-mcp-server-search_code",
+// "playwright-browser_take_screenshot") names an MCP tool <server>-<tool>, so ours is context-mode-ctx_stats and nothing else.
+// The CLI loads personal skills from ~/.copilot/skills first and ~/.agents/skills next and skips a later same-name skill
+// ("Skipped duplicate skill name ...; a higher-priority entry with the same name was already loaded"), so copilot-cli owns
+// ~/.copilot/skills and vscode writes ~/.agents/skills: each skill file names one host's tool.
+test("[D-HQ-COPILOT-NAMES-3] every shipped copilot-cli text names context-mode-ctx_* and never the VS Code name", () => {
+  const copilot = ADAPTERS.find((a) => a.id === "copilot-cli");
+  const vscode = ADAPTERS.find((a) => a.id === "vscode");
+  assert.equal(copilot.toolNamePrefix, "context-mode-");
+  assert.deepEqual(copilot.skillChannel, { kind: "home-dir", path: ".copilot/skills" });
+  assert.deepEqual(vscode.skillChannel, { kind: "home-dir", path: ".agents/skills" });
+  const { prefixes, texts } = shipped(out, "copilot-cli");
+  assert.deepEqual(prefixes, ["context-mode-"]);
+  for (const name of SKILLS) {
+    assert.equal(texts[name].includes(" or "), false, `${name} hedges between two names: ${texts[name]}`);
+    assert.equal(texts[name].includes("mcp_context-mode_"), false, `${name} names the VS Code tool: ${texts[name]}`);
+    const tool = name.replace("ctx-", "ctx_");
+    assert.equal(texts[name].split("context-mode-" + tool).length - 1, 1, `${name} names context-mode-${tool} once`);
+  }
+  // The hook deny text (exec and web) and the compact pointer carry the same single name.
+  for (const kind of ["curl", "webfetch"]) {
+    const deny = denyMessage(kind, "x", copilot);
+    assert.ok(deny.includes("context-mode-ctx_"), deny);
+    assert.equal(deny.includes("mcp_context-mode_"), false, deny);
+  }
+  const hint = prefixToolNames(COMPACT_POINTER_LINE, copilot.toolNamePrefix);
+  assert.ok(hint.includes("context-mode-ctx_") && !hint.includes("mcp_context-mode_"), hint);
 });
