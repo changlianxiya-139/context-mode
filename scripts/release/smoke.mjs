@@ -59,13 +59,33 @@ function realClaude(pathVar) {
 // One spawned step. A missing binary (ENOENT) has status null and its error on r.error. A bare name is looked up on
 // PATH the way setup does it (PATHEXT on Windows, where npm puts only <bin>.cmd/.ps1 shims), and a .cmd shim runs
 // through cmd.exe (D-RN-WIN-1); a name not found keeps its ENOENT.
+// stdout and stderr go to files, not pipes (D-RN-GEM-1): gemini relaunches itself as a child node process that
+// inherits stdio, and spawnSync waits for every pipe holder, so a pipe let that child outlive the step timeout.
+// With files, spawnSync returns when the direct child exits or the timeout kills it.
 function run(env, cwd, cmd, args, input) {
   const file = path.basename(cmd) === cmd ? (whichBin(cmd, env) ?? cmd) : cmd;
   const f = spawnForm(file, args, env);
-  const r = spawnSync(f.command, f.args, { cwd, env, input, encoding: "utf8", timeout: UPGRADE_GIT_TIMEOUT_MS,
-    windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
+  const io = fs.mkdtempSync(path.join(os.tmpdir(), `${SERVER_KEY}-smoke-io-`));
+  const outFile = path.join(io, "out"), errFile = path.join(io, "err");
+  const fds = [fs.openSync(outFile, "w"), fs.openSync(errFile, "w")];
+  let r;
+  try {
+    r = spawnSync(f.command, f.args, { cwd, env, input, stdio: [input === undefined ? "ignore" : "pipe", ...fds],
+      timeout: stepTimeoutMs(), windowsVerbatimArguments: f.windowsVerbatimArguments, windowsHide: true });
+  } finally {
+    for (const fd of fds) fs.closeSync(fd);
+  }
+  const out = fs.readFileSync(outFile, "utf8"), stderr = fs.readFileSync(errFile, "utf8");
+  fs.rmSync(io, { recursive: true, force: true });
   return { cmd: [cmd, ...args].join(" "), ok: r.status === 0, missing: r.error?.code === "ENOENT",
-    out: r.stdout ?? "", err: r.error ? String(r.error.message) : (r.stderr ?? "") };
+    out, err: r.error ? String(r.error.message) : stderr };
+}
+
+// Step timeout: UPGRADE_GIT_TIMEOUT_MS; CONTEXT_MODE_SMOKE_TIMEOUT_MS sets a shorter one (test seam, D-RN-GEM-1).
+const TIMEOUT_OVERRIDE_ENV = "CONTEXT_MODE_SMOKE_TIMEOUT_MS";
+function stepTimeoutMs() {
+  const n = Number(process.env[TIMEOUT_OVERRIDE_ENV]);
+  return Number.isInteger(n) && n > 0 && n < UPGRADE_GIT_TIMEOUT_MS ? n : UPGRADE_GIT_TIMEOUT_MS;
 }
 
 function must(step) {
@@ -128,8 +148,10 @@ function codex(env, home, a) {
 }
 
 // gemini (§11.2 step 3): a missing or failing Gemini CLI is SKIPPED, never FAIL (tier-2, GS2).
+// --consent answers the install and untrusted-workspace prompts (gemini 0.65 asks "[Y/n]" in a fresh HOME and waits);
+// --skip-settings skips the extension settings prompts (D-RN-GEM-1).
 function gemini(env, home, a) {
-  const r = run(env, home, "gemini", ["extensions", "install", a.repo, "--ref", a.ref, "--auto-update"]);
+  const r = run(env, home, "gemini", ["extensions", "install", a.repo, "--ref", a.ref, "--auto-update", "--consent", "--skip-settings"]);
   if (!r.ok) return { skipped: "gemini not available" };
   return `gemini extensions install ${a.repo} --ref ${a.ref} passed`;
 }

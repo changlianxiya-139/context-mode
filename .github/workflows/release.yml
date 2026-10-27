@@ -160,6 +160,8 @@ jobs:
       - run: npm install -g @google/gemini-cli
         continue-on-error: true   # tier-2 per GS2
       - run: node scripts/release/smoke.mjs --ref release-staging --agent gemini
+        # D-RN-GEM-1: a hang must end at this step timeout, not at the job timeout
+        timeout-minutes: 5
         continue-on-error: true   # tier-2 per GS2; failure here does not fail the job
   publish-promote:
     needs: [plan, smoke]
