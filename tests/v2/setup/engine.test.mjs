@@ -638,3 +638,30 @@ for (const [id, rel, v1, check] of [
     assert.equal(readFileSync(file, "utf8"), raw);
   });
 }
+
+// Q-WIN-2: the "drop" hook files (claude-code, gemini, qwen settings.json) written by PowerShell 5 or Notepad carry a
+// BOM and CRLF. The v1 hook entry is removed, the user's entries, the BOM and the CRLF stay. Runs on every OS: the bytes
+// are built in the test; only the fake qwen binary is an sh script, so the file is also planned through --dry-run.
+test("setup: a qwen settings.json with a BOM and CRLF loses its v1 hook entry and keeps both (Q-WIN-2)", { skip: process.platform === "win32" && "fake agent binaries are sh scripts" }, async (t) => {
+  const s = sandbox(t);
+  const state = path.join(s.root, "qwen.state");
+  fakeBin(s.root, "qwen", `case "$1 $2" in
+  "extensions list") if [ -f "${state}" ]; then echo "context-mode (2.0.0)"; fi ;;
+  "extensions link") read a; touch "${state}" ;;
+esac
+exit 0`);
+  const raw = "﻿" + JSON.stringify({ theme: "dark", hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "context-mode hook qwen PreToolUse" }] }], Stop: [{ hooks: [{ type: "command", command: "my-own-hook" }] }] } }, null, 2).split("\n").join("\r\n") + "\r\n";
+  const file = put(path.join(s.home, ".qwen", "settings.json"), raw);
+  const res = await runSetup({ home: s.home, pkgDir: s.pkgDir, env: s.env, agents: ["qwen"], runId: "r1" });
+  assert.equal(res.exitCode, 0, JSON.stringify(res, null, 2));
+  const out = readFileSync(file, "utf8");
+  assert.equal(out.charCodeAt(0), 0xfeff, "BOM kept");
+  assert.equal(out.split("\r\n").join("").includes("\n"), false, "every line end is CRLF");
+  const doc = JSON.parse(out.slice(1));
+  assert.equal(doc.theme, "dark");
+  assert.deepEqual(doc.hooks.PreToolUse, [], "v1 entry removed");
+  assert.equal(doc.hooks.Stop[0].hooks[0].command, "my-own-hook");
+  const rm = await runRemove({ home: s.home, env: s.env, runId: "r1" });
+  assert.equal(rm.exitCode, 0);
+  assert.equal(readFileSync(file, "utf8"), raw, "rollback restores the bytes");
+});
