@@ -7,11 +7,21 @@ npm i -g context-mode@next
 context-mode setup --agents kiro
 ```
 
+Update:
+
+```sh
+context-mode upgrade
+```
+
+Check: `context-mode doctor`
+
+Kiro has no install command of its own that takes the package, so setup is the install path here. `next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents kiro`. Without it, setup stops with exit 2.
 
 Restart Kiro after setup.
 
-Prefer to do it by hand? Run `context-mode setup --print kiro` and follow what it prints.
+To do the setup step by hand, run `context-mode setup --print kiro` and follow what it prints.
 
 ## What setup changes
 
