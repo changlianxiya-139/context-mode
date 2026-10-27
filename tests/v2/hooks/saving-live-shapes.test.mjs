@@ -132,3 +132,53 @@ test("copilot-cli documented postToolUse payload (no hookEventName) is replaced 
   assert.ok(Buffer.byteLength(j.modifiedResult.textResultForLlm) < Buffer.byteLength(big) / 2, "replaced text is under half the raw output");
   assert.ok(j.modifiedResult.textResultForLlm.includes("ctx_search("), "the replace names ctx_search for the rest");
 });
+
+// D-HA-GEMINI-DUMP-1: gemini-cli 0.65.0 docs/hooks/reference.md BeforeTool: decision "deny" stops the tool and the
+// reason goes to the agent. A one-file shell dump over the cap is stopped before it runs, as on every other deny host.
+test("gemini BeforeTool run_shell_command `cat <large file>` is denied before it runs, with the prefixed ctx_execute redirect", async (t) => {
+  const { repo, env } = sandbox(t);
+  const out = await handleHook("gemini", { session_id: "g1", transcript_path: "", cwd: repo, hook_event_name: "BeforeTool",
+    timestamp: "2026-10-26T00:00:00Z", tool_name: "run_shell_command", tool_input: { command: "cat logs/app.log" } }, env);
+  assert.equal(out.exitCode, 0);
+  const j = JSON.parse(out.stdout);
+  assert.equal(j.decision, "deny");
+  const abs = path.join(repo, "logs", "app.log");
+  assert.equal(j.reason, READ_DENY_MESSAGE(abs, statSync(abs).size, getAdapter("gemini").toolNamePrefix));
+  assert.ok(j.reason.includes("mcp_context-mode_ctx_execute("), j.reason);
+});
+
+test("gemini BeforeTool run_shell_command `cat <small file>` still runs", async (t) => {
+  const { repo, env } = sandbox(t);
+  writeFileSync(path.join(repo, "small.txt"), "tiny\n");
+  const out = await handleHook("gemini", { session_id: "g1", transcript_path: "", cwd: repo, hook_event_name: "BeforeTool",
+    timestamp: "2026-10-26T00:00:00Z", tool_name: "run_shell_command", tool_input: { command: "cat small.txt" } }, env);
+  assert.equal(out.exitCode, 0);
+  assert.equal(out.stdout, "");
+});
+
+// D-HA-GEMINI-HINT-1: the AfterTool handle line is the hint the agent runs next. With the session prompt naming the
+// FATAL line, that exact ctx_search call returns the FATAL line (before, the bare command matched nothing in the
+// source and H9 listed the first chunks by position).
+test("gemini AfterTool handle line: the ctx_search it names returns the FATAL line the prompt asks for", async (t) => {
+  const { repo, big, env } = sandbox(t);
+  const { ctxSearch } = await import("../../../src/core/tools/search.ts");
+  const { resolveProject } = await import("../../../src/core/project/resolve.ts");
+  const base = { session_id: "g1", transcript_path: "", cwd: repo, timestamp: "2026-10-26T00:00:00Z" };
+  await handleHook("gemini", { ...base, hook_event_name: "BeforeAgent", prompt: "read logs/app.log with a shell cat and tell me the value on the FATAL line" }, env);
+  const out = await handleHook("gemini", { ...base, hook_event_name: "AfterTool", tool_name: "run_shell_command",
+    tool_input: { command: "cat logs/app.log" }, tool_response: { llmContent: big, returnDisplay: big } }, env);
+  const reason = JSON.parse(out.stdout).reason;
+  const hl = reason.slice(reason.lastIndexOf("\n") + 1);
+  assert.ok(hl.startsWith("mcp_context-mode_ctx_search({queries:["), hl);
+  const queries = JSON.parse(hl.slice(hl.indexOf("queries:") + 8, hl.indexOf("], source:") + 1));
+  const source = JSON.parse(hl.slice(hl.indexOf("source:") + 7, hl.indexOf("})")));
+  const project = resolveProject("gemini", { env, argv: [], cwd: repo });
+  const ctx = { project, sessionId: "g1", turn: 1, signal: new AbortController().signal };
+  // The output is over SYNC_INDEX_MAX_BYTES, so its chunks are written detached: wait for them, then assert.
+  let text = "";
+  for (const end = Date.now() + 5000; Date.now() < end; await new Promise((r) => setTimeout(r, 50))) {
+    text = (await ctxSearch.handler({ queries, source }, ctx)).text;
+    if (text.includes("QX-7731-ZETA")) break;
+  }
+  assert.ok(text.includes("FATAL disk quota code=QX-7731-ZETA"), hl + "\n" + text.slice(0, 400));
+});
