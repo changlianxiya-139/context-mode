@@ -14,6 +14,9 @@ import path from "node:path";
 
 import { ctxUpgrade, runUpgrade } from "../../../src/core/tools/upgrade.ts";
 
+// D-WIN-JUNCTION-1: POSIX stores the bare sha, a Windows junction stores the absolute <agentDir>/<sha>.
+const linkText = (agentDir, sha) => (process.platform === "win32" ? path.join(agentDir, sha) : sha);
+
 function tmp(t) {
   const dir = realpathSync.native(mkdtempSync(path.join(tmpdir(), "cm-upgrade-")));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -138,11 +141,11 @@ test("[M5] upgrade/git-checkout: fetch, verify, swap current, keep one rollback 
   const agentDir = path.join(home, ".context-mode", "plugins", "pi");
   const one = releaseRepo(home, "export const v = 1;\n");
   const r1 = await runUpgrade({}, deps(home, "pi", { releaseUrl: one.url }));
-  assert.equal(readlinkSync(path.join(agentDir, "current")), one.sha);
+  assert.equal(readlinkSync(path.join(agentDir, "current")), linkText(agentDir, one.sha));
   assert.ok(r1.text.includes("| plugin checkout |  | " + path.join(agentDir, one.sha) + " |"), r1.text);
   const two = releaseRepo(home, "export const v = 2;\n");
   await runUpgrade({}, deps(home, "pi", { releaseUrl: two.url }));
-  assert.equal(readlinkSync(path.join(agentDir, "current")), two.sha);
+  assert.equal(readlinkSync(path.join(agentDir, "current")), linkText(agentDir, two.sha));
   assert.ok(existsSync(path.join(agentDir, one.sha)), "previous generation kept for rollback");
 });
 
@@ -153,7 +156,7 @@ test("[M5] upgrade/git-checkout: SHA256SUMS mismatch is BUNDLE_HASH_MISMATCH, cu
   await runUpgrade({}, deps(home, "pi", { releaseUrl: one.url }));
   const bad = releaseRepo(home, "export const v = 2;\n", false);
   await assert.rejects(() => runUpgrade({}, deps(home, "pi", { releaseUrl: bad.url })), (e) => e.code === "BUNDLE_HASH_MISMATCH");
-  assert.equal(readlinkSync(path.join(agentDir, "current")), one.sha);
+  assert.equal(readlinkSync(path.join(agentDir, "current")), linkText(agentDir, one.sha));
   assert.ok(!existsSync(path.join(agentDir, bad.sha)), "a rejected tree is not left on disk");
 });
 
@@ -166,5 +169,5 @@ test("[M5] upgrade/git-checkout rollback: a failed config write points current b
   writeFileSync(path.join(home, ".pi", "agent", "settings.json"), "{}", "utf8"); // the run must write its entry again
   const write = () => { throw new Error("forced write failure"); };
   await assert.rejects(() => runUpgrade({}, deps(home, "pi", { releaseUrl: two.url, write })));
-  assert.equal(readlinkSync(path.join(agentDir, "current")), one.sha);
+  assert.equal(readlinkSync(path.join(agentDir, "current")), linkText(agentDir, one.sha));
 });

@@ -21,6 +21,8 @@ function version(dir, sha) {
   writeFileSync(path.join(dir, sha, "server.bundle.mjs"), sha, "utf8");
 }
 const current = (dir) => path.join(dir, "current");
+// D-WIN-JUNCTION-1: POSIX stores the bare sha, a Windows junction stores the absolute <dir>/<sha>.
+const linkText = (dir, sha) => (process.platform === "win32" ? path.join(dir, sha) : sha);
 
 test("[M5] plugin-swap/first-install-creates-current-link", (t) => {
   const dir = agentDir(t);
@@ -79,7 +81,7 @@ test("[M5] plugin-swap/fetch-dirs-and-stale-swap-link-are-not-generations", (t) 
   assert.ok(existsSync(path.join(dir, ".fetch-123")), "an in-flight fetch dir is not touched");
   assert.equal(existsSync(path.join(dir, "current.swap")), false);
   assert.deepEqual(r.removed, [path.join(dir, "aaa")]);
-  assert.equal(readlinkSync(current(dir)), "ccc");
+  assert.equal(readlinkSync(current(dir)), linkText(dir, "ccc"));
 });
 
 test("[M5] plugin-swap/missing-new-dir-throws-and-leaves-current-alone", (t) => {
@@ -106,7 +108,7 @@ test("[M7] plugin-swap/a-stop-between-the-two-renames-is-undone-by-the-next-call
   symlinkSync("ccc", path.join(dir, "current.swap"), "dir");
   version(dir, "ccc");
   const r = swapPluginCurrent(dir, "ccc");
-  assert.equal(readlinkSync(current(dir)), "ccc");
+  assert.equal(readlinkSync(current(dir)), linkText(dir, "ccc"));
   assert.equal(r.previous, path.join(dir, "bbb"), "the old link was put back first, so bbb is the rollback generation");
   assert.deepEqual(r.removed, [path.join(dir, "aaa")]);
   assert.equal(lstatSync(path.join(dir, "current.old"), { throwIfNoEntry: false }), undefined);
