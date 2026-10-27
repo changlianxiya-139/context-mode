@@ -112,3 +112,46 @@ change. Two rules block the change:
 - A split per event needs one bundle per event and a hook command per event in every host config (setup
   registry, OUT_FILES, manifests, goldens). That is a design decision for the owner, not one fixer item.
 Budget unchanged (15 ms). Open: measure the codex number on a quiet host or CI before any split.
+
+### P2 GP-SEARCH held-out re-profile (macOS, Node 26.8.1, load average 16-19, 2026-10-27)
+
+Trigger: run 40496186557 (ubuntu, Node 26) measured held-out p95 50.5 ms against the 50 ms budget; the
+rerun and ci.yml passed. Method: the GP-SEARCH flow (scenario part 2 + held-out sources + 1 MB of
+docs/v2) on the built `release-out/server.mjs`, 30 passes of the 50 held-out queries under
+`node --cpu-prof`; then per-statement timing by wrapping `StatementSync.prototype.all/get` in process,
+and an interleaved old/new A/B of `ftsQuery` on the same `context.db` (61 passes, median per query).
+
+Whole loop (30 passes, ms per `ctx_search` call, includes MCP round trip):
+
+| | p50 | p95 median of runs | p95 worst run | recall@5 | MRR@10 |
+|---|---|---|---|---|---|
+| before (65843cd2) | 4.39 | 12.16 | 25.08 | 0.98 | 0.829 |
+| after (d36b505e) | 4.64 | 12.44 | 72.79 (one run, load 19) | 0.98 | 0.829 |
+
+The whole-loop numbers sit inside host noise. The interleaved in-process A/B isolates the change:
+
+| `ftsQuery` only, scope worktree | p50 | p95 | max | "postgress conection" |
+|---|---|---|---|---|
+| old | 2.24 | 10.58 | 12.28 | 12.28 |
+| new | 2.15 | 10.28 | 10.79 | 10.28 |
+
+Top self-time frames (cpu-prof, 30 passes): before `ftsQuery` 2951 ms, `porter` 2149 ms of 9385 ms;
+after `ftsQuery` 3242 ms, `porter` 2369 ms, `typoTerms` 188 ms of 10909 ms (busier host). Both frames
+are SQL time inside node:sqlite: `porter` holds the porter statement, `ftsQuery` self holds the trigram
+statement (`TRI_RANK`) and `PAGE_ROWS`.
+
+Slowest queries, per statement (best of 15):
+- "postgress conection" 12.1 ms: 7.5 ms in `chunks_vocab` reads. fts5vocab has no index on
+  `length(term)`; every read walks all 5548 porter terms (3.3-4.5 ms) and typo correction read it once
+  per misspelled stem. Fixed (D-HQ-PERF-2): one read per pass; each stem filters its own length window.
+  Differential: old vs new `ftsQuery` on 61 queries x 3 scopes x 3 source filters = 549 calls, 0 diffs.
+- "sort | uniq -c | sort -rn" 10.7 ms: 8.7 ms in the porter statement. The term `"-c"*` is a prefix
+  query on `c` and matches 1102 of 1200 chunks; MATCH alone is 1.7 ms, bm25 plus column reads make it
+  5.7 ms. Not changed: dropping short prefixes changes results.
+- Long natural queries (8-9 ms): about 3 ms porter + 3-5 ms trigram statement.
+
+Not taken (small or not provably the same): reading trigram columns from `chunks_content` instead of the
+`chunks` join (1.40 -> 1.19 ms per query); dropping the `sources` join (only needed for a source filter).
+Budget unchanged (50 ms). The ubuntu 50.5 ms is one run of a noisy shared runner; local p95 is about 12 ms.
+The whole-loop reply text changed on 2 of 50 queries between the two runs because the 1 MB corpus is
+read from docs/v2 at run time and docs/v2 changed by `git pull`; the fixed-DB differential shows 0 diffs.
