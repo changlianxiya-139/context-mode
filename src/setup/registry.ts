@@ -114,10 +114,26 @@ export interface CheckRow {
   nativePlugin?: NativePlugin;
 }
 
-export interface NativePlugin { bin: string; args: string[]; plugin: string; hooksVia: string; skillsVia: string; }
+/** list = one table row per plugin with an "enabled" word (codex plugin list); extension = one block per extension, a
+ *  "<mark> <name> (<version>)" header line then an indented "Enabled (User): true|false" line (qwen / gemini
+ *  extensions list). enable = the host command that turns a listed but disabled install back on (doctor names it). */
+export interface NativePlugin {
+  bin: string; args: string[]; plugin: string; hooksVia: string; skillsVia: string;
+  format: "table" | "extension"; enable?: string[];
+}
+
+const EXTENSION_LIST = ["extensions", "list"];
+/** D-NI-EXT-DOCTOR-1: `qwen|gemini extensions install <source>` copies the package as an extension: the hooks are the
+ *  row's package hook file, the skills are the package skills/ dir (qwen and gemini both load <extension>/skills). */
+function extensionPlugin(bin: string, id: AgentId): NativePlugin {
+  return { bin, args: EXTENSION_LIST, plugin: SERVER_KEY, hooksVia: getAdapter(id).hookChannel.path, skillsVia: SKILLS_DIR_NAME,
+    format: "extension", enable: ["extensions", "enable", SERVER_KEY] };
+}
 
 const NATIVE_PLUGIN: Partial<Record<AgentId, NativePlugin>> = {
-  codex: { bin: "codex", args: ["plugin", "list"], plugin: PLUGIN_ID, hooksVia: ".codex-plugin", skillsVia: path.join("codex", SKILLS_DIR_NAME) },
+  codex: { bin: "codex", args: ["plugin", "list"], plugin: PLUGIN_ID, hooksVia: ".codex-plugin", skillsVia: path.join("codex", SKILLS_DIR_NAME), format: "table" },
+  qwen: extensionPlugin("qwen", "qwen"),
+  gemini: extensionPlugin("gemini", "gemini"),
 };
 
 function serverCmd(ctx: SetupContext, id: AgentId): string[] {

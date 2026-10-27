@@ -13,7 +13,7 @@ import type { AgentId, V1Finding } from "../core/contracts/types.ts";
 import { detectV1 } from "../core/ops/detect-v1.ts";
 import { editHostConfigText } from "../core/ops/host-config.ts";
 import { BACKUP_DIR, COMMAND_SKILLS, LOCK_FILE, SKILL_FILE, STATE_DIR, assertWritable, buildRegistry, configEdits, hookCommandString, renderSkill } from "./registry.ts";
-import type { CheckRow, HookFile, SetupContext } from "./registry.ts";
+import type { CheckRow, HookFile, NativePlugin, SetupContext } from "./registry.ts";
 import { spawnForm, whichBin, winCmdLine } from "./spawn-bin.ts";
 export { spawnForm, whichBin, winCmdLine };
 import { SAMPLE_FILE, hookSample, sampleText, sampleVerdict } from "./hook-sample.ts";
@@ -459,16 +459,43 @@ function skillsCheck(row: CheckRow, pkgDir: string): Check {
 const PLUGIN_ENABLED = "enabled";
 const WORD_TRIM = ",;";
 
-/** The row as the host's own plugin install sets it up, or undefined when that plugin is not listed as enabled. */
-function nativeRow(row: CheckRow, env: SetupContext["env"]): CheckRow | undefined {
+const EXT_ENABLED_USER = "Enabled (User):";
+const EXT_TRUE = "true";
+type NativeState = "enabled" | "disabled" | undefined;
+
+/** codex plugin list: the table row that names the plugin, enabled when one of its words is "enabled". */
+function tableState(n: NativePlugin, text: string): NativeState {
+  const line = text.split("\n").find((l) => l.split(" ").includes(n.plugin));
+  if (line === undefined) return undefined;
+  return line.split(" ").map((w) => trimChars(w, WORD_TRIM)).includes(PLUGIN_ENABLED) ? "enabled" : "disabled";
+}
+
+/** qwen 0.26.1 / gemini 0.65.0 extensions list: a block per extension. A header line starts in column 0 ("<mark> <name>
+ *  (<version>)"); its indented lines follow. Only the header names the extension: an indented "context-mode" is an MCP
+ *  server another extension ships. */
+function extensionState(n: NativePlugin, text: string): NativeState {
+  let mine = false;
+  for (const raw of text.split("\n")) {
+    const line = raw.trimEnd();
+    if (line.length && !line.startsWith(" ")) { mine = line.split(" ")[1] === n.plugin; continue; }
+    const t = line.trim();
+    if (mine && t.startsWith(EXT_ENABLED_USER)) return t.slice(EXT_ENABLED_USER.length).trim() === EXT_TRUE ? "enabled" : "disabled";
+  }
+  return undefined;
+}
+
+/** The host's own install as its list command shows it (undefined: not listed in that form, setup owns the agent). */
+function nativeState(row: CheckRow, env: SetupContext["env"]): NativeState {
   const n = row.nativePlugin;
   if (!n || !hostBin(n.bin, env).file) return undefined;
   const r = runBin(n.bin, n.args, env);
   if (r.status !== 0) return undefined;
-  const line = `${r.stdout}`.split("\n").find((l) => l.split(" ").includes(n.plugin));
-  if (line === undefined) return undefined;
-  const words = line.split(" ").map((w) => trimChars(w, WORD_TRIM));
-  if (!words.includes(PLUGIN_ENABLED)) return undefined;
+  // Gemini 0.65.0 writes the extension list to stderr (D-INST-2).
+  return n.format === "extension" ? extensionState(n, `${r.stdout}${r.stderr}`) : tableState(n, `${r.stdout}`);
+}
+
+/** The row as the host's own plugin install sets it up. */
+function nativeRow(row: CheckRow, n: NativePlugin): CheckRow {
   return { ...row, config: undefined, cli: undefined, copy: undefined, hookFiles: [], listCommand: { bin: n.bin, args: n.args },
     hookInstall: { kind: "package", via: n.hooksVia }, skillInstall: { kind: "package", via: n.skillsVia } };
 }
@@ -481,11 +508,19 @@ function trimChars(w: string, chars: string): string {
   return w.slice(a, b);
 }
 
-/** A native plugin install: verify it as is, write nothing (a second hook copy under HOME would run twice). */
+/** A native plugin install: verify it as is, write nothing (a second hook copy under HOME would run twice). A listed but
+ *  disabled extension is a FAIL that names the host's enable command: setup cannot link over it (D-NI-EXT-DOCTOR-1). */
 async function nativeResult(row: CheckRow, ctx: SetupContext): Promise<AgentResult | undefined> {
-  const native = nativeRow(row, ctx.env);
-  if (!native) return undefined;
-  const res: AgentResult = { id: row.id, status: "PASS", v1: [], changes: [], checks: await verifyRow(native, ctx), bin: hostBin(native.nativePlugin!.bin, ctx.env).file };
+  const n = row.nativePlugin;
+  const state = nativeState(row, ctx.env);
+  if (!n || state === undefined) return undefined;
+  const bin = hostBin(n.bin, ctx.env).file;
+  if (state === "disabled") {
+    if (!n.enable) return undefined;
+    return { id: row.id, status: "FAIL", v1: [], changes: [], checks: [], bin,
+      reason: `context-mode is installed but disabled in ${n.bin}, run ${n.bin} ${n.enable.join(" ")}` };
+  }
+  const res: AgentResult = { id: row.id, status: "PASS", v1: [], changes: [], checks: await verifyRow(nativeRow(row, n), ctx), bin };
   const bad = res.checks.filter((c) => !c.ok);
   if (bad.length) { res.status = "FAIL"; res.reason = bad.map((c) => `${c.name}: ${c.detail}`).join("; "); }
   return res;
