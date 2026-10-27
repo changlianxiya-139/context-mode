@@ -3,15 +3,31 @@
 ## Install
 
 ```sh
-npm i -g context-mode@next
+codex plugin marketplace add mksglu/context-mode
+codex plugin add context-mode@context-mode
+```
+
+Update:
+
+```sh
+codex plugin marketplace upgrade context-mode
+```
+
+Check: `context-mode doctor`
+
+The plugin installs the npm package. Codex keeps plugin hooks off until you trust them in the Codex TUI. Restart Codex after the install.
+
+`next` is the v2 prerelease tag on npm (`npm i -g context-mode@next` also gives the `context-mode` command for doctor). `latest` stays on the old release.
+
+Setup is the fallback and the repair for what the native step cannot do:
+
+```sh
 context-mode setup --agents codex
 ```
 
 With no terminal (a script or CI), add `--yes`: `context-mode setup --yes --agents codex`. Without it, setup stops with exit 2.
 
-Restart Codex after setup.
-
-Prefer to do it by hand? Run `context-mode setup --print codex` and follow what it prints.
+To do the setup step by hand, run `context-mode setup --print codex` and follow what it prints.
 
 ## What setup changes
 
