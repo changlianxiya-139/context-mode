@@ -36,6 +36,7 @@ test("[M7] build/npm-d1-shape: release-out/package.json is the D1 package (bin c
     files: top,
     name: "context-mode",
     pi: { extensions: ["./pi/index.js"], skills: ["./pi/skills"] },
+    repository: { type: "git", url: "git+https://github.com/mksglu/context-mode.git" }, // D-RN-REPO-1
     type: "module",
     version: "2.0.0",
   });
