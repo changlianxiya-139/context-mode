@@ -66,7 +66,7 @@ test("findRuntime never spawns a child process to look up a binary (no where/whi
 });
 
 // ---- M2-R3: Windows lookup rules, shim interpreter, windowsHide on every spawn (GP4 rows). ----
-import { readFileSync, readdirSync, symlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, symlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runProcess } from "../../../src/core/sandbox/spawn.ts";
 
@@ -184,10 +184,13 @@ test("[M7] findRuntime reads PATH from the env it is given, not only process.env
 
 test("[M2] GP4/windows-shim-interpreter (unit): runProcess runs a Windows shim through sh found on PATH", async () => {
   if (process.platform === "win32") return;
+  // D-VT-WINBASH-1: the interpreter is Git Bash, found from git.exe: <dir>/cmd/git.exe -> <dir>/bin/bash.exe.
   const dir = tmpBin({ python: SHIM });
-  symlinkSync(findRuntime("shell"), join(dir, "sh.exe"));
+  mkdirSync(join(dir, "cmd")); mkdirSync(join(dir, "bin"));
+  writeFileSync(join(dir, "cmd", "git.exe"), "");
+  symlinkSync(findRuntime("shell"), join(dir, "bin", "bash.exe"));
   try {
-    const r = await asWindows({ PATH: dir, PATHEXT }, () =>
+    const r = await asWindows({ PATH: dir + ":" + join(dir, "cmd"), PATHEXT }, () =>
       runProcess([join(dir, "python"), "code.py"], { cwd: dir, env: { PATH: dir }, signal: new AbortController().signal, timeoutMs: 10000 }));
     assert.equal(r.exitCode, 0, r.stderr.toString("utf8"));
     assert.equal(r.stdout.toString("utf8"), "shim-ran code.py\n");

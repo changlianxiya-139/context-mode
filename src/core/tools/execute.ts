@@ -18,7 +18,7 @@ import { isInside } from "../project/contain.ts";
 import { capBytes } from "../sandbox/cap.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
 import { rewriteWindowsBuildTools } from "../sandbox/win-build.ts";
-import { findRuntime } from "../sandbox/runtimes.ts";
+import { findRuntime, noRuntimeError } from "../sandbox/runtimes.ts";
 import { runProcess, type RunResult } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { indexText } from "../index/text.ts";
@@ -177,7 +177,7 @@ async function handler(raw: ExecuteInput, ctx: ToolContext): Promise<ToolReply> 
   }
   // Step 4.
   const runtime = findRuntime(input.language);
-  if (runtime === null) return fail(new CtxError("NO_RUNTIME", { lang: input.language }).toLine());
+  if (runtime === null) return fail(noRuntimeError(input.language).toLine());
   // Steps 6-7.
   const env = buildChildEnv(process.env, extra);
   const timeoutMs = input.timeoutMs ?? EXEC_TIMEOUT_MS;

@@ -2,7 +2,8 @@
 // No cache (PATH may change between calls), no install-path probing, no where/which spawn.
 import { accessSync, constants as fsConstants, statSync } from "node:fs";
 import path from "node:path";
-import { PATHEXT_DEFAULT } from "../contracts/constants.ts";
+import { GIT_BASH_RELATIVE, GIT_BIN, PATHEXT_DEFAULT, WIN_SHELL_LANGS } from "../contracts/constants.ts";
+import { CtxError } from "../contracts/errors.ts";
 
 const PATHEXT_SEPARATOR = ";";
 // DEVIATIONS D-M2-R3-2: the only files Windows CreateProcess starts with shell:false. Node refuses
@@ -20,8 +21,8 @@ function candidates(lang: string): string[] {
   const win = isWin();
   switch (lang) {
     case "shell":
-      // §2a: Git Bash is reached only through PATH lookup of these names.
-      return win ? ["sh.exe", "bash.exe"] : ["sh"];
+      // D-VT-WINBASH-1: on Windows the shell never comes from a PATH lookup of bash.exe (see findGitBash).
+      return win ? [] : ["sh"];
     case "powershell":
       return ["pwsh", "pwsh.exe", "powershell.exe"];
     case "javascript":
@@ -64,6 +65,7 @@ function isRunnable(full: string): boolean {
  * extensionless shim; the first shim seen is returned only when the whole walk finds no such hit.
  */
 export function findRuntime(lang: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (isWin() && WIN_SHELL_LANGS.includes(lang)) return findGitBash(env);
   const dirs = (env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
   const pathExt = isWin()
     ? (env.PATHEXT ?? PATHEXT_DEFAULT).split(PATHEXT_SEPARATOR).filter((e) => e !== "")
@@ -81,4 +83,28 @@ export function findRuntime(lang: string, env: NodeJS.ProcessEnv = process.env):
     }
   }
   return shim;
+}
+
+/**
+ * DEVIATIONS D-VT-WINBASH-1: on Windows the shell is Git Bash, found from the installed Git, never from a
+ * bash.exe on PATH. %LOCALAPPDATA%\\Microsoft\\WindowsApps\\bash.exe is an App Execution Alias (node cannot
+ * spawn it: EACCES) and C:\\Windows\\System32\\bash.exe is the WSL launcher (a different filesystem).
+ * Git for Windows installs <root>\\cmd\\git.exe, <root>\\bin\\git.exe, <root>\\mingw64\\bin\\git.exe and
+ * <root>\\bin\\bash.exe (git-for-windows/build-extra installer layout; the installer puts <root>\\cmd on PATH).
+ * So the git.exe found on PATH names the root: the first of GIT_BASH_RELATIVE (../bin/bash.exe, then
+ * ../../bin/bash.exe, from the dir of git.exe) that is a file wins. No Git, or Git without bash.exe: null.
+ */
+function findGitBash(env: NodeJS.ProcessEnv): string | null {
+  const git = findRuntime(GIT_BIN, env);
+  if (git === null) return null;
+  for (const rel of GIT_BASH_RELATIVE) {
+    const full = path.resolve(path.dirname(git), ...rel);
+    if (isRunnable(full)) return full;
+  }
+  return null;
+}
+
+/** The error a null from findRuntime(lang) becomes: Windows shell languages name the Git for Windows fix. */
+export function noRuntimeError(lang: string): CtxError {
+  return isWin() && WIN_SHELL_LANGS.includes(lang) ? new CtxError("NO_GIT_BASH") : new CtxError("NO_RUNTIME", { lang });
 }

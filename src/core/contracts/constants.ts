@@ -338,10 +338,10 @@ declare const __CTX_BUNDLE_SHA__: string | undefined;
 export const BUNDLE_SHA: string | undefined = typeof __CTX_BUNDLE_SHA__ === "string" ? __CTX_BUNDLE_SHA__ : undefined;
 
 // ctx_doctor (impl/07 §4-§5, ADR-0010; DEVIATIONS D-M5-C2-1). Order is the fixed row order; labels are ADR-0010's check names.
-export const DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"] as const);
+export const DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10", "D11"] as const);
 export const DOCTOR_LABEL: Readonly<Record<(typeof DOCTOR_CHECK_ORDER)[number], string>> = Object.freeze({
   D1: "version", D2: "node", D3: "host config", D4: "old entries", D5: "hook round trip", D5b: "double-fire",
-  D6: "MCP", D7: "project and worktree", D8: "context.db", D9: "index", D10: "enforcement mode",
+  D6: "MCP", D7: "project and worktree", D8: "context.db", D9: "index", D10: "enforcement mode", D11: "shell",
 });
 export const HOOK_FIXTURE_DIR = "fixtures"; // impl/00 §1 file tree: <bundle>/fixtures/hook-roundtrip.json (D-M5-arch-4)
 export const HOOK_FIXTURE_FILE = "hook-roundtrip.json"; // D5 fixture, one JSON object keyed by agent id
@@ -434,6 +434,10 @@ export const GIT_NO_PROMPT_ENV: Readonly<Record<string, string>> = Object.freeze
 export const GIT_NO_CRLF_ENV: Readonly<Record<string, string>> = Object.freeze({ GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "false" });
 export const GIT_NOT_STARTED = "git did not start"; // FETCH_FAILED <code> when git is not on PATH
 export const GIT_BIN = "git";
+// D-VT-WINBASH-1: Windows shell languages resolve to Git Bash. Paths from the dir of git.exe, in order:
+// <root>\cmd\git.exe and <root>\bin\git.exe -> ../bin/bash.exe; <root>\mingw64\bin\git.exe -> ../../bin/bash.exe.
+export const WIN_SHELL_LANGS: readonly string[] = Object.freeze(["shell", "bash", "sh"]);
+export const GIT_BASH_RELATIVE: readonly (readonly string[])[] = Object.freeze([["..", "bin", "bash.exe"], ["..", "..", "bin", "bash.exe"]]);
 export const GIT_EXIT_LABEL = "git exit "; // FETCH_FAILED <code>: git exit <n>: <stderr>
 export const UPGRADE_TRASH_SUFFIX = ".ctx-upgrade-removing"; // a removed path is renamed here first, deleted on commit (rollback)
 export const TABLE_ROW_START = "| ";
@@ -506,6 +510,10 @@ export const D5_FIX = "run ctx_upgrade"; // a broken hook entry is a broken inst
 // doctor-db.ts: D8 checks, D9 counts, D10 mode (impl/07 §5).
 export const PRAGMA_INTEGRITY_CHECK = "PRAGMA integrity_check";
 export function D10_DETAIL(mode: string): string { return `enforcement mode: ${mode}`; }
+// D11 shell (D-VT-WINBASH-1).
+export const D11_WIN_DETAIL = "Git Bash not found"; export const D11_WIN_FIX = "install Git for Windows";
+export const D11_POSIX_DETAIL = "no sh on PATH"; export const D11_POSIX_FIX = "install sh or add it to PATH";
+export function D11_PASS_DETAIL(shell: string, win: boolean): string { return `${win ? "Git Bash" : "sh"}: ${shell}`; }
 // doctor-heal.ts: D8 heal (impl/07 §5 step 7). Order: main file, then WAL, then SHM.
 export const DB_SIBLING_SUFFIXES = Object.freeze(["", DB_WAL_SUFFIX, DB_SHM_SUFFIX] as const);
 export const HEAL_TMP_SUFFIX = ".heal"; // VACUUM INTO <context.db>.heal, then rename over context.db

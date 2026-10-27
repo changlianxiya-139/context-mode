@@ -79,7 +79,7 @@ test("DECAY_X1000 is the 128-entry checked-in table and matches the formula (DEC
 const VARS = {
   NODE_TOO_OLD: { v: "22.1.0" }, NO_SQLITE: {}, DB_GONE: {}, NO_PROJECT: { kind: "spawn-cwd" },
   UNKNOWN_FIELD: { f: "query" }, TIMEOUT: { ms: 600000 }, NO_RUNTIME: { lang: "python" },
-  FETCH_FAILED: { code: "ENOTFOUND" }, SSRF: { host: "127.0.0.1" }, OUTSIDE_ROOT: { p: "/etc/passwd", root: "/repo" },
+  NO_GIT_BASH: {}, FETCH_FAILED: { code: "ENOTFOUND" }, SSRF: { host: "127.0.0.1" }, OUTSIDE_ROOT: { p: "/etc/passwd", root: "/repo" },
   INVALID_ARGS: { field: "offset", action: "drop offset with sort:\"timeline\"" }, ONE_OF_INPUT: { names: "code, file" },
   SPAWN_FAILED: { detail: "ENOENT" },
   DB_CORRUPT: {}, SCHEMA_STALE: { found: 2, want: 1 }, NO_GIT_DIR: { path: "/repo" }, NO_HOME: { name: "HOME" },
@@ -95,6 +95,7 @@ const EXPECTED = {
   UNKNOWN_FIELD: 'Unknown field "query". Fix: use "queries".',
   TIMEOUT: "Timed out after 600000 ms. Fix: pass background: true.",
   NO_RUNTIME: "No python runtime on PATH. Fix: install it or pick another language.",
+  NO_GIT_BASH: "Git Bash not found. Fix: install Git for Windows.",
   FETCH_FAILED: "Fetch failed: ENOTFOUND. Fix: check the URL or proxy.",
   SSRF: "Blocked private address 127.0.0.1. Fix: use a public URL.",
   OUTSIDE_ROOT: "Path /etc/passwd is outside the project. Fix: use a path inside /repo.",
@@ -112,8 +113,8 @@ const EXPECTED = {
   CONFIG_PARSE_FAILED: "codex config at /home/u/.codex/config.toml did not parse as toml. Fix: fix the syntax error and re-run ctx_upgrade.",
 };
 
-test("ERROR_TEXT has exactly the 20 codes, each one line with '. Fix: ' (A-C6, impl/07 A-T2)", () => {
-  assert.equal(Object.keys(ERROR_TEXT).length, 20);
+test("ERROR_TEXT has exactly the 21 codes, each one line with '. Fix: ' (A-C6, impl/07 A-T2)", () => {
+  assert.equal(Object.keys(ERROR_TEXT).length, 21);
   assert.deepEqual(Object.keys(ERROR_TEXT).sort(), Object.keys(EXPECTED).sort());
   assert.ok(Object.isFrozen(ERROR_TEXT));
   for (const [code, text] of Object.entries(ERROR_TEXT)) {
@@ -377,7 +378,7 @@ test("[M4] no-literal-number lint on M4 files (only 0 and 1)", () => {
 test("[M5] types.ts declares the impl/07 §0 tools-ops types (A-T1)", () => {
   const src = readFileSync(join(SRC, "types.ts"), "utf8");
   for (const s of [
-    'export type DoctorCheckId = "D1" | "D2" | "D3" | "D4" | "D5" | "D5b" | "D6" | "D7" | "D8" | "D9" | "D10";',
+    'export type DoctorCheckId = "D1" | "D2" | "D3" | "D4" | "D5" | "D5b" | "D6" | "D7" | "D8" | "D9" | "D10" | "D11";',
     "export interface DoctorRow {", "id: DoctorCheckId;", "label: string;", 'status: "PASS" | "FAIL" | "UNKNOWN";',
     "detail: string;", "fixCommand?: string;",
     "export interface V1Finding { file: string; path: string; reason: string; }",
@@ -412,7 +413,7 @@ test("[M5] release constants for doctor D1 (D-M5-arch-5)", () => {
 
 // M5-C2 (impl/07 §1-§6, impl/12 §3.1/§4.1, ADR-0010, ADR-0011; DEVIATIONS D-M5-C2-1..3).
 test("[M5] doctor check order, labels and D5 fixture (ADR-0010, impl/07 §5)", () => {
-  assert.deepEqual(C.DOCTOR_CHECK_ORDER, ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"]);
+  assert.deepEqual(C.DOCTOR_CHECK_ORDER, ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10", "D11"]);
   assert.deepEqual(Object.keys(C.DOCTOR_LABEL), C.DOCTOR_CHECK_ORDER);
   assert.equal(C.DOCTOR_LABEL.D1, "version");
   assert.equal(C.DOCTOR_LABEL.D8, "context.db");

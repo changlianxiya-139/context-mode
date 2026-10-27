@@ -1,5 +1,5 @@
 // src/core/tools/doctor.ts — ctx_doctor thin handler (impl/07 §5, ADR-0010, impl/11 §1).
-// Runs D1-D10 in DOCTOR_CHECK_ORDER through the ops/doctor-* row builders, heals context.db when D8's
+// Runs D1-D11 in DOCTOR_CHECK_ORDER through the ops/doctor-* row builders, heals context.db when D8's
 // integrity_check failed (the one write, ops/db-heal.ts), renders buildReport. Never isError: a broken
 // check is a row, not a tool error. DEVIATIONS D-M5-arch-3/4/5, D-M5-U1-6, D-M5-D6-1..3.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -16,7 +16,7 @@ import type {
 } from "../contracts/types.ts";
 import { checkDoubleFire, checkHostConfig, checkV1Leftovers } from "../ops/doctor-config.ts";
 import { checkDb, checkIndex } from "../ops/doctor-db.ts";
-import { checkMcp, checkMode, checkNode, checkProject, checkVersion } from "../ops/doctor-env.ts";
+import { checkMcp, checkMode, checkNode, checkProject, checkShell, checkVersion } from "../ops/doctor-env.ts";
 import { checkHookRoundTrip } from "../ops/doctor-hook.ts";
 import { healD8 } from "../ops/db-heal.ts";
 import { buildReport } from "../ops/report.ts";
@@ -114,6 +114,7 @@ export async function runDoctorChecks(ctx: ToolContext, adapter: AdapterRow, hos
     },
     D9: () => checkIndex(project),
     D10: () => checkMode(adapter),
+    D11: () => checkShell(env),
   };
   const rows: DoctorRow[] = [];
   for (const id of DOCTOR_CHECK_ORDER) rows.push(await guard(id, checks[id]));

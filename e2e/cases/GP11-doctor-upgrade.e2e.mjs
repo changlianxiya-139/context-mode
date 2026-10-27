@@ -40,7 +40,7 @@ function fixture(t) {
 const call = (c, name, args) => c.request("tools/call", { name, arguments: args ?? {} });
 const text = (r) => r?.content?.[0]?.text ?? "";
 
-test("[M5] GP11/doctor-table-golden: ctx_doctor renders a Markdown table of D1-D10", async (t) => {
+test("[M5] GP11/doctor-table-golden: ctx_doctor renders a Markdown table of D1-D11", async (t) => {
   const { home, repo, spawn } = fixture(t);
   const c = await spawn();
   const reply = await call(c, "ctx_doctor", {});

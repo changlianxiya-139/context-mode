@@ -14,6 +14,7 @@
     "D7 project and worktree",
     "D8 context.db",
     "D9 index",
-    "D10 enforcement mode"
+    "D10 enforcement mode",
+    "D11 shell"
   ]
 }

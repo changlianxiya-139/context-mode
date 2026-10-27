@@ -4,12 +4,13 @@
 import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import {
-  D1_DEV_BUILD_DETAIL, D1_NO_NETWORK_DETAIL, D1_UPDATE_DETAIL, D10_DETAIL, D2_BUN_DETAIL, D2_NODE_DETAIL, D2_NODE_FIX,
+  D1_DEV_BUILD_DETAIL, D1_NO_NETWORK_DETAIL, D1_UPDATE_DETAIL, D10_DETAIL, D11_PASS_DETAIL, D11_POSIX_DETAIL, D11_POSIX_FIX, D11_WIN_DETAIL, D11_WIN_FIX, D2_BUN_DETAIL, D2_NODE_DETAIL, D2_NODE_FIX,
   D2_SQLITE_DETAIL, D2_SQLITE_FIX, D4_REASON_JOIN, D6_UNKNOWN_DETAIL, D7_DETAIL, D7_FIX, DOCTOR_FIX_UPGRADE,
   DOCTOR_GIT_TIMEOUT_MS, DOCTOR_LABEL, DOCTOR_PASS_DETAIL, GIT_BIN, GIT_LS_REMOTE, GIT_NO_PROMPT_ENV, GIT_SHA_HEX_LEN,
   LS_REMOTE_FIELD_SEP, NODE_MIN, NODE_VERSION_PREFIX, NODE_VERSION_SEP, RELEASE_BRANCH, RELEASE_REPO_URL, SQLITE_MODULE,
 } from "../contracts/constants.ts";
 import type { AdapterRow, DoctorCheckId, DoctorRow, ProjectContext, ToolContext } from "../contracts/types.ts";
+import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess } from "../sandbox/spawn.ts";
 
 function pass(id: DoctorCheckId, detail: string = DOCTOR_PASS_DETAIL): DoctorRow {
@@ -114,4 +115,13 @@ export function checkProject(i: ProjectInput): DoctorRow {
 // D10: the adapter's denyChannel as row data, always PASS (D-M5-arch-3: no enforcement import).
 export function checkMode(adapter: Pick<AdapterRow, "denyChannel">): DoctorRow {
   return pass("D10", D10_DETAIL(adapter.denyChannel));
+}
+
+// D11 (D-VT-WINBASH-1): the shell ctx_execute and ctx_batch start. Windows: Git Bash from the installed Git; POSIX: sh on PATH.
+// No shell is a FAIL, never a silent switch to another shell.
+export function checkShell(env: NodeJS.ProcessEnv): DoctorRow {
+  const win = process.platform === "win32";
+  const shell = findRuntime("shell", env);
+  if (shell !== null) return pass("D11", D11_PASS_DETAIL(shell, win));
+  return win ? fail("D11", D11_WIN_DETAIL, D11_WIN_FIX) : fail("D11", D11_POSIX_DETAIL, D11_POSIX_FIX);
 }

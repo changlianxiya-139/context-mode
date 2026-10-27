@@ -5,7 +5,7 @@ export type ErrorCode =
   | "TIMEOUT" | "NO_RUNTIME" | "FETCH_FAILED" | "SSRF" | "OUTSIDE_ROOT"
   | "INVALID_ARGS" | "ONE_OF_INPUT" | "SPAWN_FAILED"
   | "DB_CORRUPT" | "SCHEMA_STALE" | "NO_GIT_DIR" | "NO_HOME" // store additions, DEVIATIONS D-M1-2
-  | "PLUGIN_ROOT_MISSING" | "BUNDLE_HASH_MISMATCH" | "CONFIG_PARSE_FAILED"; // tools-ops additions, impl/07 A-T2
+  | "NO_GIT_BASH" | "PLUGIN_ROOT_MISSING" | "BUNDLE_HASH_MISMATCH" | "CONFIG_PARSE_FAILED"; // tools-ops additions, impl/07 A-T2
 
 export const ERROR_TEXT: Readonly<Record<ErrorCode, string>> = Object.freeze({
   NODE_TOO_OLD: "Node <v> is below 24.15.0. Fix: install Node 24.15.0 or later.",
@@ -14,6 +14,7 @@ export const ERROR_TEXT: Readonly<Record<ErrorCode, string>> = Object.freeze({
   NO_PROJECT: "Project source <kind> is missing. Fix: run ctx_doctor.",
   UNKNOWN_FIELD: 'Unknown field "<f>". Fix: use "queries".',
   TIMEOUT: "Timed out after <ms> ms. Fix: pass background: true.",
+  NO_GIT_BASH: "Git Bash not found. Fix: install Git for Windows.", // D-VT-WINBASH-1
   NO_RUNTIME: "No <lang> runtime on PATH. Fix: install it or pick another language.",
   FETCH_FAILED: "Fetch failed: <code>. Fix: check the URL or proxy.",
   SSRF: "Blocked private address <host>. Fix: use a public URL.",

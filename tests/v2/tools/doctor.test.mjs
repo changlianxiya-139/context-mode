@@ -15,7 +15,7 @@ import { composeMatcher } from "../../../src/core/ops/doctor-config.ts";
 import * as C from "../../../src/core/contracts/constants.ts";
 
 const KEY = "d".repeat(16);
-const ORDER = ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"];
+const ORDER = ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10", "D11"];
 
 function tmp(t) {
   const dir = mkdtempSync(path.join(tmpdir(), "cm-doctor-"));

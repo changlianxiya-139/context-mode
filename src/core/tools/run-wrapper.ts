@@ -34,7 +34,7 @@ import { decide } from "../policy/decide.ts";
 import { resolveProject } from "../project/resolve.ts";
 import { capBytes } from "../sandbox/cap.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
-import { findRuntime } from "../sandbox/runtimes.ts";
+import { findRuntime, noRuntimeError } from "../sandbox/runtimes.ts";
 import { runProcess } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { indexText } from "../index/text.ts";
@@ -118,7 +118,7 @@ export async function runWrapperMain(argv: string[], env: NodeJS.ProcessEnv): Pr
   try {
     // Step 6: as ctx_execute with language "shell" (§2.3 steps 4-8, 10).
     const runtime = findRuntime(SHELL);
-    if (runtime === null) throw new CtxError("NO_RUNTIME", { lang: SHELL });
+    if (runtime === null) throw noRuntimeError(SHELL);
     const project = projectOf(argv, cwd);
     const r = await runProcess([runtime, "-c", command], {
       cwd,

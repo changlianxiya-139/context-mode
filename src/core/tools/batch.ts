@@ -13,7 +13,7 @@ import { chunkText } from "../index/chunk.ts";
 import { canonicalKey } from "../journal/append.ts";
 import { capBytes } from "../sandbox/cap.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
-import { findRuntime } from "../sandbox/runtimes.ts";
+import { findRuntime, noRuntimeError } from "../sandbox/runtimes.ts";
 import { runProcess } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { ftsInsert, ftsQuery } from "../store/fts.ts";
@@ -82,7 +82,7 @@ function stoppedAt(cmd: string, error: string): CmdOut {
 }
 
 async function runCommand(cmd: string, shell: string | null, ctx: ToolContext, deadline: number, boundMs: number): Promise<CmdOut> {
-  if (shell === null) return stoppedAt(cmd, formatError("NO_RUNTIME", { lang: SHELL }));
+  if (shell === null) return stoppedAt(cmd, noRuntimeError(SHELL).toLine());
   const left = deadline - Date.now();
   if (left <= 0) return stoppedAt(cmd, formatError("TIMEOUT", { ms: boundMs }));
   const r = await runProcess([shell, SHELL_INLINE_FLAG, cmd], {
