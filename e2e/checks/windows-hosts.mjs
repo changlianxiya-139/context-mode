@@ -268,11 +268,30 @@ function lastJson(stdout) {
   return undefined;
 }
 
+/** On a setup failure: what the host itself says (its mcp list) and the config file setup should have written. */
+function diag(id, home, env) {
+  const h = HOSTS.find((x) => x.id === id);
+  if (h?.bin) {
+    const b = path.join(WIN ? prefix : binDir, WIN ? `${h.bin}.cmd` : h.bin);
+    const args = id === "opencode" ? ["mcp", "list", "--pure"] : id === "codex" ? ["mcp", "list"] : ["--version"];
+    const r = run(b, args, { env, timeout: 60_000 });
+    console.log(`DIAG|${OS}|${id}|${h.bin} ${args.join(" ")} -> exit ${r.status} ${r.error ?? ""} stdout=${tail(r.stdout, 600)} stderr=${tail(r.stderr, 600)}`);
+  }
+  const cfg = id === "codex" ? path.join(home, ".codex", "config.toml") : id === "opencode" ? path.join(home, ".config", "opencode", "opencode.json") : undefined;
+  if (cfg) console.log(`DIAG|${OS}|${id}|${cfg} ${existsSync(cfg) ? "holds: " + tail(readFileSync(cfg, "utf8"), 800) : "does not exist"}`);
+  console.log(`DIAG|${OS}|${id}|files under HOME: ${walkHome(home).slice(0, 40).join(", ")}`);
+}
+function walkHome(dir, base = dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walkHome(path.join(dir, e.name), base) : [path.relative(base, path.join(dir, e.name)).split(path.sep).join("/")]));
+}
+
 function stepSetup(id, env) {
   const r = run(cmBin, ["setup", "--yes", "--agents", id, "--json"], { env });
   const json = lastJson(r.stdout);
   const ok = r.status === 0 && json?.agents?.[0]?.status === "PASS" && (json.agents[0].checks ?? []).every((c) => c.ok);
   record(id, "setup", ok, ok ? checkLines(json) : `exit ${r.status} ${r.error ?? ""} ${json ? checkLines(json) : ""} stderr=${tail(r.stderr)} stdout=${json ? "" : tail(r.stdout)}`);
+  if (!ok) diag(id, env.HOME, env);
   return ok;
 }
 function stepDoctor(id, env) {
