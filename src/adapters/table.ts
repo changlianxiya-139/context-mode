@@ -123,6 +123,15 @@ export function hasReplace(row: AdapterRow): boolean {
   return REPLACE_ROWS.has(row.id);
 }
 
+// D-HA-GEMINI-DUMP-1: rows where a one-file shell dump over the cap runs and PostToolUse replaces it (D-M7-RR-1).
+// gemini is out: its BeforeTool deny stops the tool before it runs (gemini-cli docs/hooks/reference.md BeforeTool),
+// so a large `cat` is denied with the Read redirect, as on every other deny host.
+const DUMP_REPLACE_ROWS: ReadonlySet<AgentId> = new Set<AgentId>(["claude-code", "copilot-cli", "pi"]);
+
+export function dumpRunsThenReplaces(row: AdapterRow): boolean {
+  return DUMP_REPLACE_ROWS.has(row.id) && hasReplace(row);
+}
+
 // DECISIONS-r11 (B): rows whose encode carries a UserPromptSubmit hint as additionalContext. Only these rows
 // get turn-boundary recall after a compaction; kiro, pi and opencode keep their one compact path (ADR-0001).
 const RECALL_ROWS: ReadonlySet<AgentId> = new Set<AgentId>(["claude-code", "codex", "gemini", "qwen", "copilot-cli", "vscode", "zcode"]);

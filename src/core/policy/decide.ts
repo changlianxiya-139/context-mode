@@ -15,7 +15,7 @@ import {
   USER_DENY_REASON_PREFIX,
 } from "../contracts/constants.ts";
 import type { AdapterRow, CanonicalHookEvent, Decision, DenyKind, SimpleCommand } from "../contracts/types.ts";
-import { hasReplace } from "../../adapters/table.ts";
+import { dumpRunsThenReplaces, hasReplace } from "../../adapters/table.ts";
 import { parseShell } from "./parse.ts";
 import { isSubagentCall } from "./subagent.ts";
 import { unwrap } from "./unwrap.ts";
@@ -239,9 +239,9 @@ function read(ev: CanonicalHookEvent, row: AdapterRow, input: Record<string, unk
 }
 
 /** 6a: null = not a dump, ALLOW = bounded dump, deny = unbounded dump over the cap. Skipped only on a row with a
- *  Read tool and a replace channel: there the dump runs and PostToolUse replaces it (D-HA-QWEN-DUMP-1). */
+ *  Read tool where the dump runs and PostToolUse replaces it (D-HA-QWEN-DUMP-1, D-HA-GEMINI-DUMP-1). */
 function shellDump(cmds: SimpleCommand[], cwd: string, row: AdapterRow): Decision | null {
-  if (row.nativeTools.read !== undefined && row.nativeTools.read.length > 0 && hasReplace(row)) return null;
+  if (row.nativeTools.read !== undefined && row.nativeTools.read.length > 0 && dumpRunsThenReplaces(row)) return null;
   if (cmds.length !== 1) return null;
   const c = cmds[0];
   if (c.redirectsToFile || c.endsInBoundedSink) return null;
