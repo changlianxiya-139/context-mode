@@ -60,13 +60,13 @@ This run tested the package on each agent. Bytes are one large tool result (abou
 ## Open items
 
 - Live arms: 0 of 30 ran in the gate, because step mode finds no case for files changed since base.
-- Windows grandchild-kill test flaked once. It needs a fix.
+- Windows grandchild-kill test failed once in the release run and passed on rerun. Root cause not yet found.
 - Codex: `codex exec` needs approval for the ctx MCP tool. A large shell read is not caught.
 - Kiro: check camelCase event names and the `shell` matcher against the real host.
 - VS Code: check event name casing on a real host.
 - Gemini: deny reason search query is the raw command text. No live run.
 - Copilot CLI and ZCode: tool name forms not verified on a real host.
-- Nine agents have no live model session.
+- Eight agents have no live model session.
 - Hosts not installed: Kiro, ZCode, OpenCode.
 - GitHub prerelease v2.0.0-next.4 has no npm package.
 - Setup skips qwen when qwen is not on PATH. It should use the native install.
