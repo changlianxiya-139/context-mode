@@ -6,6 +6,7 @@
     "files",
     "name",
     "pi",
+    "repository",
     "type",
     "version"
   ],
@@ -42,6 +43,10 @@
       "skills": [
         "./pi/skills"
       ]
+    },
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/mksglu/context-mode.git"
     },
     "type": "module"
   },

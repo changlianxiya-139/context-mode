@@ -19,7 +19,8 @@ function names(dir, out = []) {
 // D-FU-RM-PI-1 (ADR-0002 GS7 amended) + ADR-0019 D1 (PO-NPM-2): one root package.json is allowed, the D1 npm shape
 // (name, version, bin, type, engines, files, pi). It must carry no dependency key, no scripts and no private (D1
 // publishes it); no package.json below the root.
-const ALLOWED_ROOT_KEYS = ["bin", "engines", "files", "name", "pi", "type", "version"];
+// D-RN-REPO-1: repository (npm provenance needs repository.url to match the source repo).
+const ALLOWED_ROOT_KEYS = ["bin", "engines", "files", "name", "pi", "repository", "type", "version"];
 
 test("[M6] GP11/npm-audit-zero-high-critical: release-out has no runtime dependencies, no node_modules, no nested package.json (#1225)", () => {
   assert.ok(existsSync(OUT), "release-out missing (run build/build.mjs first)");
@@ -37,5 +38,6 @@ test("[M6] GP11/npm-audit-zero-high-critical: release-out has no runtime depende
     assert.ok(!("private" in pkg), "release-out/package.json has private (ADR-0019 D1 publishes it)");
     assert.deepEqual(pkg.bin, { "context-mode": "cli.mjs" }, "release-out/package.json bin");
     assert.deepEqual(pkg.engines, { node: ">=24.15.0" }, "release-out/package.json engines");
+    assert.deepEqual(pkg.repository, { type: "git", url: "git+https://github.com/mksglu/context-mode.git" }, "release-out/package.json repository");
   }
 });

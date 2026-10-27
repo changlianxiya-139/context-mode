@@ -169,13 +169,16 @@ export const OUT_FILES: readonly string[] = [
   ".claude-plugin", "claude-code", CLI_BUNDLE, "copilot", "fixtures", "gemini-extension.json", HOOK_BUNDLE, HOOKS_DIR, "opencode", "pi",
   "qwen-extension.json", "run.mjs", "search.mjs", SERVER_BUNDLE, "skills", RELEASE_SUMS_FILE,
 ].slice().sort();
-const OUT_PACKAGE_KEYS: readonly string[] = ["bin", "engines", "files", "name", "pi", "type", "version"];
+// D-RN-REPO-1: npm provenance rejects a publish (E422) unless repository.url names the source repo. This is the
+// `npm pkg fix` form, so check-npm-tarball.mjs's "npm pkg fix is a no-op" gate still holds.
+const REPOSITORY = { type: "git", url: "git+https://github.com/mksglu/context-mode.git" };
+const OUT_PACKAGE_KEYS: readonly string[] = ["bin", "engines", "files", "name", "pi", "repository", "type", "version"];
 const PI_KEYS: readonly string[] = ["extensions", "skills"];
 
 function npmPackageJson(version: string): JsonObject {
   return {
     name: SERVER_KEY, version, type: "module", bin: { [SERVER_KEY]: CLI_BUNDLE }, engines: { node: NODE_ENGINE },
-    files: [...OUT_FILES], pi: { extensions: [PI_EXTENSION], skills: [PI_SKILLS] },
+    files: [...OUT_FILES], pi: { extensions: [PI_EXTENSION], skills: [PI_SKILLS] }, repository: { ...REPOSITORY },
   };
 }
 
@@ -193,6 +196,7 @@ export function assertOutPackageJson(pkg: unknown): void {
   if (JSON.stringify(obj.bin) !== JSON.stringify({ [SERVER_KEY]: CLI_BUNDLE })) throw new Error("package.json: bin must be {" + SERVER_KEY + ": " + CLI_BUNDLE + "}");
   if (JSON.stringify(obj.engines) !== JSON.stringify({ node: NODE_ENGINE })) throw new Error("package.json: engines must be {node: " + NODE_ENGINE + "}");
   if (JSON.stringify(obj.files) !== JSON.stringify(OUT_FILES)) throw new Error("package.json: files must be " + OUT_FILES.join(","));
+  if (JSON.stringify(obj.repository) !== JSON.stringify(REPOSITORY)) throw new Error("package.json: repository must be " + JSON.stringify(REPOSITORY));
   const pi = obj.pi;
   if (pi === null || typeof pi !== "object" || Array.isArray(pi)) throw new Error("package.json: pi must be an object");
   const piObj = pi as Record<string, unknown>;
