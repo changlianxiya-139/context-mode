@@ -454,6 +454,43 @@ function skillsCheck(row: CheckRow, pkgDir: string): Check {
   return { name: "skills", ok: bad.length === 0, detail: bad.length ? `${bad.map((f) => f.file).join(", ")} missing or without the ${s.prefixes.join(" / ") || "plain"} tool prefix` : undefined };
 }
 
+// ---------- native plugin (D-NI-CODEX-DOCTOR-1) ----------
+
+const PLUGIN_ENABLED = "enabled";
+const WORD_TRIM = ",;";
+
+/** The row as the host's own plugin install sets it up, or undefined when that plugin is not listed as enabled. */
+function nativeRow(row: CheckRow, env: SetupContext["env"]): CheckRow | undefined {
+  const n = row.nativePlugin;
+  if (!n || !hostBin(n.bin, env).file) return undefined;
+  const r = runBin(n.bin, n.args, env);
+  if (r.status !== 0) return undefined;
+  const line = `${r.stdout}`.split("\n").find((l) => l.split(" ").includes(n.plugin));
+  if (line === undefined) return undefined;
+  const words = line.split(" ").map((w) => trimChars(w, WORD_TRIM));
+  if (!words.includes(PLUGIN_ENABLED)) return undefined;
+  return { ...row, config: undefined, cli: undefined, copy: undefined, hookFiles: [], listCommand: { bin: n.bin, args: n.args },
+    hookInstall: { kind: "package", via: n.hooksVia }, skillInstall: { kind: "package", via: n.skillsVia } };
+}
+
+function trimChars(w: string, chars: string): string {
+  let a = 0;
+  let b = w.length;
+  while (a < b && chars.includes(w.charAt(a))) a++;
+  while (b > a && chars.includes(w.charAt(b - 1))) b--;
+  return w.slice(a, b);
+}
+
+/** A native plugin install: verify it as is, write nothing (a second hook copy under HOME would run twice). */
+async function nativeResult(row: CheckRow, ctx: SetupContext): Promise<AgentResult | undefined> {
+  const native = nativeRow(row, ctx.env);
+  if (!native) return undefined;
+  const res: AgentResult = { id: row.id, status: "PASS", v1: [], changes: [], checks: await verifyRow(native, ctx), bin: hostBin(native.nativePlugin!.bin, ctx.env).file };
+  const bad = res.checks.filter((c) => !c.ok);
+  if (bad.length) { res.status = "FAIL"; res.reason = bad.map((c) => `${c.name}: ${c.detail}`).join("; "); }
+  return res;
+}
+
 async function verifyRow(row: CheckRow, ctx: SetupContext): Promise<Check[]> {
   const env = ctx.env;
   const checks: Check[] = [parseCheck(row)];
@@ -556,7 +593,7 @@ export async function runSetup(opts: SetupOptions): Promise<SetupResult> {
       if (!row) { agents.push({ id, status: "FAIL", reason: `unknown agent ${id}`, v1: [], changes: [], checks: [] }); continue; }
       current = id;
       opts.onAgent?.(id, "start");
-      const res = await setupRow(row, ctx, run, !!opts.dryRun);
+      const res = (await nativeResult(row, ctx)) ?? await setupRow(row, ctx, run, !!opts.dryRun);
       current = undefined;
       agents.push(res);
       opts.onAgent?.(id, "done", res);
@@ -631,6 +668,8 @@ export async function runDoctor(opts: SetupOptions): Promise<SetupResult> {
     const row = reg.find((r) => r.id === id);
     if (!row) { agents.push({ id, status: "FAIL", reason: `unknown agent ${id}`, v1: [], changes: [], checks: [] }); continue; }
     opts.onAgent?.(id, "start");
+    const native = await nativeResult(row, ctx);
+    if (native) { agents.push(native); opts.onAgent?.(id, "done", native); continue; }
     const res = await setupRow(row, ctx, run, true);
     if (res.status === "PASS") {
       // Report-only findings (shared temp file, user data dir) are never changed by setup, so they cannot be fixed by it.

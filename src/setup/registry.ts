@@ -15,6 +15,7 @@ export const STATE_DIR = ".context-mode";
 export const LOCK_FILE = "setup.lock";
 export const BACKUP_DIR = "backups";
 const PLUGIN_ID = `${SERVER_KEY}@${SERVER_KEY}`;
+const SKILLS_DIR_NAME = "skills";
 
 // Routing-instruction files: setup never writes them, even if a row lists one by mistake (ADR-0019 section 3).
 export const INSTRUCTION_FILES: readonly string[] = Object.freeze([
@@ -108,7 +109,16 @@ export interface CheckRow {
   hookRunCommand: string[];
   allowedWrites: string[];
   goldenPayload: Record<string, unknown>;
+  /** D-NI-CODEX-DOCTOR-1 (ADR-0023): the host's own plugin install. When `bin args` lists `plugin` as enabled, the
+   *  plugin ships the server, hooks (hooksVia) and skills (skillsVia), so setup writes nothing and doctor checks that. */
+  nativePlugin?: NativePlugin;
 }
+
+export interface NativePlugin { bin: string; args: string[]; plugin: string; hooksVia: string; skillsVia: string; }
+
+const NATIVE_PLUGIN: Partial<Record<AgentId, NativePlugin>> = {
+  codex: { bin: "codex", args: ["plugin", "list"], plugin: PLUGIN_ID, hooksVia: ".codex-plugin", skillsVia: path.join("codex", SKILLS_DIR_NAME) },
+};
 
 function serverCmd(ctx: SetupContext, id: AgentId): string[] {
   return [process.execPath, path.join(ctx.pkgDir, SERVER_BUNDLE), AGENT_FLAG, id];
@@ -258,6 +268,8 @@ export function buildRegistry(ctx: SetupContext): CheckRow[] {
     if (row.installMode !== "in-process") out.hookCommand = hookCommand;
     const copy = copyFor(ctx, id);
     if (copy) out.copy = copy;
+    const native = NATIVE_PLUGIN[id];
+    if (native) out.nativePlugin = native;
     return out;
   });
 }
