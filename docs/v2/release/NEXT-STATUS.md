@@ -1,10 +1,24 @@
 # Status of the next channel
 
-Checked 2026-10-27 with `npm view context-mode dist-tags --prefer-online`.
+Checked 2026-10-28 against the raw registry JSON (https://registry.npmjs.org/context-mode).
 
 ## npm version on next
 
-`next` is 2.0.0-next.7. `latest` is still 1.0.169.
+`next` is 2.0.0-next.8 (provenance present, SLSA v1). `latest` is still 1.0.169.
+
+## What 2.0.0-next.8 ships
+
+- Windows fixes on all 10 hosts. The `windows hosts` matrix (CI run 40609930810, head 4fb62aa6) ran 10 agents x 5 steps per OS: windows-latest 51 pass 0 fail, ubuntu-latest 51 pass 0 fail, macos-latest 51 pass 0 fail. Details per host: docs/v2/release/WINDOWS.md.
+- D-VT-WINBASH-1: Git Bash resolver for shell languages and ctx_batch on Windows.
+- D-TOML-PARSER-1: Codex config.toml is read and edited with a real TOML parser.
+- D-N7-VSCODE-TOOLS-1: VS Code shell, read and web tool names.
+- D-TRUST-KEYDIR-2 (found by the macOS matrix before release): `codex app-server` sometimes returned an empty reply, so setup keyed the Codex hook trust with /private/var/... while Codex uses /var/.... Setup now asks Codex up to 3 times and keys a default ~/.codex as spelled; `setup --print` uses the same key. Reproduced on macOS, test first.
+
+## Release numbers (next.8)
+
+- Gate on head 4fb62aa6: `gate --all` exit 0. v2-unit 1914 pass, 0 fail, 17 skip of 1931. Live 1 of 30 ran. Fix rounds: 1.
+- Tag v2.0.0-next.8 on 4fb62aa6. release.yml run 40611388019 green (rollback skipped, as expected). npm publish step ended 01:10:17Z, GitHub prerelease created after it by job order (github-release needs publish-npm); the registry `time` field for the version reads 01:11:55Z, 81 s after the GitHub release timestamp (01:10:34Z). Cause of that registry delay not found.
+- `latest` stays 1.0.169; GitHub release v1.0.169 is still Latest.
 
 ## How to test it
 
@@ -49,23 +63,10 @@ The Claude Code, Pi and OpenCode rows are from next.6 and were not re-tested for
 - ZCode: no behaviour change. The prefix already equals the documented name. The new test was green on first run, so it did not go red. No code bug found behind skillOk=false.
 - Codex: setup now writes `default_tools_approval_mode = "approve"` in `[mcp_servers.context-mode]`, next to `omit_tools_from`. The live run on codex 0.156.1 accepted it. `codex mcp list` showed the entry enabled.
 
-## Gate and release numbers
-
-- Gate on head 397cc04b: `gate --all` exit 0. v2-unit 1690 pass, 0 fail, 5 skip of 1695. Live 0 of 30 ran (no case covers the changed files, ADR-0012). Fix rounds: 0.
-- Release: 2.0.0-next.7 published from head f61b6973 with tag `next` and provenance. GitHub release v2.0.0-next.7 is a prerelease. `latest` stays 1.0.169.
-
 ## Open items
 
-- Live arms: 0 of 30 ran in the gate, because no case covers the changed files.
-- Windows grandchild-kill test failed once in the next.6 release run and passed on rerun. Root cause not found.
-- ZCode: skillOk=false on next.6 and next.7. Cause open. Needs a real host.
-- Kiro: MCP tool name for a hyphen server is not confirmed. Needs a real host.
-- VS Code: confirm whether the real tool name is `run_in_terminal` or `runTerminalCommand`.
-- Qwen: ctx-stats skill names two tool names. Keep only `mcp__context-mode__ctx_stats`.
-- Gemini: check that hooks work outside a git repo.
-- Copilot CLI: tool name form not verified on a real host.
-- Codex: a large shell read is not caught in `codex exec`.
-- Eight agents have no live model session.
-- Hosts not installed: Kiro, ZCode, OpenCode.
-- GitHub prerelease v2.0.0-next.4 has no npm package.
-- Setup skips qwen when qwen is not on PATH. It should use the native install.
+- Windows: a logged-in host session never ran, so doctor `hook-seen` stays WARN. vscode, kiro and zcode cannot be installed on a runner (config-level proof only).
+- Windows: opencode keeps a stale plugin path after a package move (no agent flag in the plugin list; D-WIN-HOOKMERGE-1).
+- Windows: `e2e/checks/windows-grandchild-kill.mjs` failed once on a 2 s close budget (run 40590253825) and in the next.6 release run; root cause not found, budget not changed.
+- Timing: `[r3] units/222KB` (50 ms budget) failed once under full-suite load on a laptop (91 ms), passes alone and on rerun; budget not changed.
+- Registry `time` for a version can lag the publish step by about 80 s; the GitHub release can look earlier than npm in the registry.
