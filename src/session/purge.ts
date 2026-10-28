@@ -260,6 +260,13 @@ export function purgeSession(opts: PurgeOpts): PurgeResult {
           ).get(sessionId) as { c: number }).c;
           fts.prepare("DELETE FROM chunks WHERE session_id = ?").run(sessionId);
           fts.prepare("DELETE FROM chunks_trigram WHERE session_id = ?").run(sessionId);
+          // External-content fts DELETE does not cascade to chunks_body
+          // (ADR 0003); purge the body rows too or the text leaks past the
+          // per-session wipe. Wrapped so a pre-migration store without the
+          // body table still wipes the indexes (the outer catch is best-effort).
+          try {
+            fts.prepare("DELETE FROM chunks_body WHERE session_id = ?").run(sessionId);
+          } catch { /* legacy self-storing schema: no body table */ }
           if (before > 0) chunksRemoved = true;
         } finally {
           try { fts.close(); } catch { /* best effort */ }

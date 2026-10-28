@@ -368,11 +368,13 @@ export class ContentStore {
   #stmtInsertSource!: PreparedStatement;
   #stmtInsertChunk!: PreparedStatement;
   #stmtInsertChunkTrigram!: PreparedStatement;
+  #stmtInsertChunkBody!: PreparedStatement;
   #stmtInsertVocab!: PreparedStatement;
 
   // Dedup path (delete previous source with same label before re-indexing)
   #stmtDeleteChunksByLabel!: PreparedStatement;
   #stmtDeleteChunksTrigramByLabel!: PreparedStatement;
+  #stmtDeleteChunksBodyByLabel!: PreparedStatement;
   #stmtDeleteSourcesByLabel!: PreparedStatement;
 
   // Search path (hot)
@@ -401,6 +403,7 @@ export class ContentStore {
   // Cleanup path
   #stmtCleanupChunks!: PreparedStatement;
   #stmtCleanupChunksTrigram!: PreparedStatement;
+  #stmtCleanupChunksBody!: PreparedStatement;
   #stmtCleanupSources!: PreparedStatement;
 
   // FTS5 optimization: track inserts and optimize periodically to defragment
@@ -461,6 +464,11 @@ export class ContentStore {
   // ── Schema ──
 
   #initSchema(): void {
+    // Legacy self-storing FTS5 tables are rebuilt as external-content indexes
+    // BEFORE the CREATEs, so an existing store keeps its text and the CREATE
+    // IF NOT EXISTS below no-ops. Fresh DBs skip it and get the external form.
+    this.#migrateToExternalContentIfNeeded();
+
     this.#db.exec(`
       CREATE TABLE IF NOT EXISTS sources (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -472,15 +480,27 @@ export class ContentStore {
         content_hash TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS chunks_body (
+        id INTEGER PRIMARY KEY,
+        title TEXT,
+        content TEXT,
+        source_id INTEGER,
+        content_type TEXT,
+        session_id TEXT,
+        event_id TEXT,
+        timestamp TEXT
+      );
+
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
         title,
         content,
         source_id UNINDEXED,
         content_type UNINDEXED,
-        source_category UNINDEXED,
         session_id UNINDEXED,
         event_id UNINDEXED,
         timestamp UNINDEXED,
+        content=chunks_body,
+        content_rowid=id,
         tokenize='porter unicode61'
       );
 
@@ -489,10 +509,11 @@ export class ContentStore {
         content,
         source_id UNINDEXED,
         content_type UNINDEXED,
-        source_category UNINDEXED,
         session_id UNINDEXED,
         event_id UNINDEXED,
         timestamp UNINDEXED,
+        content=chunks_body,
+        content_rowid=id,
         tokenize='trigram'
       );
 
@@ -503,52 +524,123 @@ export class ContentStore {
       CREATE INDEX IF NOT EXISTS idx_sources_label ON sources(label);
     `);
 
-    // FTS5 schema migration: old schema (4 cols) → new schema (8 cols).
-    // FTS5 virtual tables do not support ALTER TABLE ADD COLUMN, so we must
-    // DROP + re-CREATE. Detection: check for sentinel column `source_category`
-    // via pragma_table_xinfo. Three states:
-    //   1. No table          → CREATE above handled it (fresh DB)
-    //   2. Old schema (4 cols) → DROP + CREATE new
-    //   3. New schema (8 cols) → do nothing
-    try {
-      const cols = this.#db.prepare(
-        "SELECT name FROM pragma_table_xinfo('chunks')"
-      ).all() as Array<{ name: string }>;
-      const colNames = new Set(cols.map(c => c.name));
-      if (cols.length > 0 && !colNames.has("source_category")) {
-        // Old schema detected — drop both FTS5 tables and re-create with new columns
-        this.#db.exec("DROP TABLE IF EXISTS chunks");
-        this.#db.exec("DROP TABLE IF EXISTS chunks_trigram");
-        this.#db.exec(`
-          CREATE VIRTUAL TABLE chunks USING fts5(
-            title,
-            content,
-            source_id UNINDEXED,
-            content_type UNINDEXED,
-            source_category UNINDEXED,
-            session_id UNINDEXED,
-            event_id UNINDEXED,
-            timestamp UNINDEXED,
-            tokenize='porter unicode61'
-          );
-          CREATE VIRTUAL TABLE chunks_trigram USING fts5(
-            title,
-            content,
-            source_id UNINDEXED,
-            content_type UNINDEXED,
-            source_category UNINDEXED,
-            session_id UNINDEXED,
-            event_id UNINDEXED,
-            timestamp UNINDEXED,
-            tokenize='trigram'
-          );
-        `);
-      }
-    } catch { /* pragma_table_xinfo may fail if table doesn't exist yet — safe to ignore */ }
+    // The 4-col → 8-col migration that used to live here is subsumed by
+    // #migrateToExternalContentIfNeeded (called at the top of this method):
+    // it rebuilds ANY legacy self-storing generation (4-col or 8-col) as
+    // external-content indexes in one pass, preserving rows. A second DROP +
+    // self-storing CREATE here would clobber that, so it is gone.
 
     // Stale detection columns — safe for existing DBs (ALTER is O(1) in SQLite)
     try { this.#db.exec("ALTER TABLE sources ADD COLUMN file_path TEXT"); } catch { /* already exists */ }
     try { this.#db.exec("ALTER TABLE sources ADD COLUMN content_hash TEXT"); } catch { /* already exists */ }
+  }
+
+  /**
+   * Rebuild legacy self-storing FTS5 tables as external-content indexes.
+   *
+   * ctx_index used to write every chunk's raw text into BOTH chunks and
+   * chunks_trigram (2x storage). This moves the text into one chunks_body table
+   * and points both indexes at it via content=/content_rowid=. Detection is the
+   * stored DDL: a chunks table whose definition lacks content=chunks_body is a
+   * legacy generation (4-col or 8-col, both self-storing) and is rebuilt here,
+   * preserving every row. Fresh databases skip it; the CREATEs in #initSchema
+   * build the external form directly.
+   *
+   * Irreversible, so the pre-migration bytes are copied out first. An
+   * external-content fts DELETE does NOT cascade to chunks_body (ADR 0003), so
+   * every purge site deletes from three tables — see #prepareStatements.
+   */
+  #migrateToExternalContentIfNeeded(): void {
+    let ddl: string | null = null;
+    try {
+      const row = this.#db
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='chunks'")
+        .get() as { sql: string } | undefined;
+      ddl = row?.sql ?? null;
+    } catch {
+      return; // table probe failed — let the CREATEs handle it
+    }
+    if (!ddl) return; // fresh DB
+    if (ddl.includes("content=chunks_body")) return; // already migrated
+
+    // Back up the pre-migration bytes once. VACUUM INTO needs a target that
+    // does not exist yet; a leftover means a prior attempt got this far.
+    const backupPath = `${this.#dbPath}.pre-external-content.bak`;
+    try {
+      if (!existsSync(backupPath)) {
+        this.#db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
+      }
+    } catch {
+      process.stderr.write(
+        "[context-mode] FTS5 external-content backup failed; proceeding without a rollback copy\n",
+      );
+    }
+
+    // Read every existing chunk, tolerating the 4-column generation.
+    let cols = new Set<string>();
+    try {
+      cols = new Set(
+        (this.#db.prepare("SELECT name FROM pragma_table_xinfo('chunks')").all() as Array<{ name: string }>).map(
+          (c) => c.name,
+        ),
+      );
+    } catch {
+      /* empty set → every column falls back to its default below */
+    }
+    const col = (name: string, fallback: string) => (cols.has(name) ? name : fallback);
+    let rows: Array<Record<string, unknown>> = [];
+    try {
+      rows = this.#db
+        .prepare(
+          `SELECT rowid AS id,
+             ${col("title", "NULL")} AS title,
+             ${col("content", "NULL")} AS content,
+             ${col("source_id", "NULL")} AS source_id,
+             ${col("content_type", "NULL")} AS content_type,
+             ${col("session_id", "''")} AS session_id,
+             ${col("event_id", "''")} AS event_id,
+             ${col("timestamp", "''")} AS timestamp
+           FROM chunks`,
+        )
+        .all() as Array<Record<string, unknown>>;
+    } catch {
+      return; // unreadable legacy table — leave it; CREATE IF NOT EXISTS is a no-op
+    }
+
+    const migrate = this.#db.transaction(() => {
+      this.#db.exec("DROP TABLE IF EXISTS chunks");
+      this.#db.exec("DROP TABLE IF EXISTS chunks_trigram");
+      this.#db.exec(`
+        CREATE TABLE chunks_body (
+          id INTEGER PRIMARY KEY,
+          title TEXT, content TEXT, source_id INTEGER, content_type TEXT,
+          session_id TEXT, event_id TEXT, timestamp TEXT
+        );
+        CREATE VIRTUAL TABLE chunks USING fts5(
+          title, content, source_id UNINDEXED, content_type UNINDEXED,
+          session_id UNINDEXED, event_id UNINDEXED, timestamp UNINDEXED,
+          content=chunks_body, content_rowid=id, tokenize='porter unicode61');
+        CREATE VIRTUAL TABLE chunks_trigram USING fts5(
+          title, content, source_id UNINDEXED, content_type UNINDEXED,
+          session_id UNINDEXED, event_id UNINDEXED, timestamp UNINDEXED,
+          content=chunks_body, content_rowid=id, tokenize='trigram');
+      `);
+      const ib = this.#db.prepare(
+        "INSERT INTO chunks_body(id,title,content,source_id,content_type,session_id,event_id,timestamp) VALUES (?,?,?,?,?,?,?,?)",
+      );
+      const ip = this.#db.prepare(
+        "INSERT INTO chunks(rowid,title,content,source_id,content_type,session_id,event_id,timestamp) VALUES (?,?,?,?,?,?,?,?)",
+      );
+      const it = this.#db.prepare(
+        "INSERT INTO chunks_trigram(rowid,title,content,source_id,content_type,session_id,event_id,timestamp) VALUES (?,?,?,?,?,?,?,?)",
+      );
+      for (const r of rows) {
+        ib.run(r.id, r.title, r.content, r.source_id, r.content_type, r.session_id, r.event_id, r.timestamp);
+        ip.run(r.id, r.title, r.content, r.source_id, r.content_type, r.session_id, r.event_id, r.timestamp);
+        it.run(r.id, r.title, r.content, r.source_id, r.content_type, r.session_id, r.event_id, r.timestamp);
+      }
+    });
+    migrate();
   }
 
   #prepareStatements(): void {
@@ -559,11 +651,18 @@ export class ContentStore {
     this.#stmtInsertSource = this.#db.prepare(
       "INSERT INTO sources (label, chunk_count, code_chunk_count, file_path, content_hash) VALUES (?, ?, ?, ?, ?)",
     );
+    // External-content write order: chunks_body is the single source of the
+    // raw text; both fts indexes are fed the SAME rowid so they stay aligned.
+    // The body statement runs first and its rowid (lastInsertRowid) is passed
+    // to the two index inserts below.
+    this.#stmtInsertChunkBody = this.#db.prepare(
+      "INSERT INTO chunks_body (title, content, source_id, content_type, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
     this.#stmtInsertChunk = this.#db.prepare(
-      "INSERT INTO chunks (title, content, source_id, content_type, source_category, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO chunks (rowid, title, content, source_id, content_type, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     );
     this.#stmtInsertChunkTrigram = this.#db.prepare(
-      "INSERT INTO chunks_trigram (title, content, source_id, content_type, source_category, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO chunks_trigram (rowid, title, content, source_id, content_type, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     );
     this.#stmtInsertVocab = this.#db.prepare(
       "INSERT OR IGNORE INTO vocabulary (word) VALUES (?)",
@@ -576,6 +675,11 @@ export class ContentStore {
     );
     this.#stmtDeleteChunksTrigramByLabel = this.#db.prepare(
       "DELETE FROM chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
+    );
+    // An external-content fts DELETE does NOT cascade to chunks_body (ADR 0003),
+    // so the body must be purged explicitly or re-indexing leaks orphan rows.
+    this.#stmtDeleteChunksBodyByLabel = this.#db.prepare(
+      "DELETE FROM chunks_body WHERE source_id IN (SELECT id FROM sources WHERE label = ?)",
     );
     this.#stmtDeleteSourcesByLabel = this.#db.prepare(
       "DELETE FROM sources WHERE label = ?",
@@ -816,6 +920,9 @@ export class ContentStore {
     this.#stmtCleanupChunksTrigram = this.#db.prepare(
       "DELETE FROM chunks_trigram WHERE source_id IN (SELECT id FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days'))",
     );
+    this.#stmtCleanupChunksBody = this.#db.prepare(
+      "DELETE FROM chunks_body WHERE source_id IN (SELECT id FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days'))",
+    );
     this.#stmtCleanupSources = this.#db.prepare(
       "DELETE FROM sources WHERE datetime(indexed_at) < datetime('now', '-' || ? || ' days')",
     );
@@ -1049,6 +1156,7 @@ export class ContentStore {
     const transaction = this.#db.transaction(() => {
       this.#stmtDeleteChunksByLabel.run(label);
       this.#stmtDeleteChunksTrigramByLabel.run(label);
+      this.#stmtDeleteChunksBodyByLabel.run(label);
       this.#stmtDeleteSourcesByLabel.run(label);
 
       if (chunks.length === 0) {
@@ -1062,8 +1170,12 @@ export class ContentStore {
       const now = new Date().toISOString();
       for (const chunk of chunks) {
         const ct = chunk.hasCode ? "code" : "prose";
-        this.#stmtInsertChunk.run(chunk.title, chunk.content, sourceId, ct, null, sessionIdCol, eventIdCol, now);
-        this.#stmtInsertChunkTrigram.run(chunk.title, chunk.content, sourceId, ct, null, sessionIdCol, eventIdCol, now);
+        // Body first: its rowid becomes the shared docid of both indexes so
+        // they resolve to the same stored text (external-content contract).
+        const bodyInfo = this.#stmtInsertChunkBody.run(chunk.title, chunk.content, sourceId, ct, sessionIdCol, eventIdCol, now);
+        const rowid = Number(bodyInfo.lastInsertRowid);
+        this.#stmtInsertChunk.run(rowid, chunk.title, chunk.content, sourceId, ct, sessionIdCol, eventIdCol, now);
+        this.#stmtInsertChunkTrigram.run(rowid, chunk.title, chunk.content, sourceId, ct, sessionIdCol, eventIdCol, now);
       }
 
       return sourceId;
@@ -1589,6 +1701,9 @@ export class ContentStore {
     const cleanup = this.#db.transaction((days: number) => {
       this.#stmtCleanupChunks.run(days);
       this.#stmtCleanupChunksTrigram.run(days);
+      // Body does not cascade from the fts delete (ADR 0003); purge it here so
+      // stale-source cleanup leaves no orphan text behind.
+      this.#stmtCleanupChunksBody.run(days);
       return this.#stmtCleanupSources.run(days);
     });
     const info = cleanup(maxAgeDays);

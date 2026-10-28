@@ -62,27 +62,27 @@ describe("Schema & Lifecycle", () => {
     const cols = db.prepare("SELECT name FROM pragma_table_xinfo('chunks')").all() as Array<{ name: string }>;
     const colNames = cols.map(c => c.name);
 
-    // FTS5 tables should have 8 user columns + 2 hidden (table-name, rank) = 10 total
+    // FTS5 tables should have 7 user columns + 2 hidden (table-name, rank) = 9 total
     // pragma_table_xinfo includes hidden FTS5 internal columns
     expect(colNames).toContain("title");
     expect(colNames).toContain("content");
     expect(colNames).toContain("source_id");
     expect(colNames).toContain("content_type");
-    expect(colNames).toContain("source_category");
+    expect(colNames).not.toContain("source_category");
     expect(colNames).toContain("session_id");
     expect(colNames).toContain("event_id");
     expect(colNames).toContain("timestamp");
-    // 8 user-defined + 2 hidden FTS5 internal (chunks, rank)
-    expect(colNames.length).toBe(10);
+    // 7 user-defined + 2 hidden FTS5 internal (chunks, rank)
+    expect(colNames.length).toBe(9);
 
     // Same check for trigram table
     const trigramCols = db.prepare("SELECT name FROM pragma_table_xinfo('chunks_trigram')").all() as Array<{ name: string }>;
     const trigramColNames = trigramCols.map(c => c.name);
-    expect(trigramColNames).toContain("source_category");
+    expect(trigramColNames).not.toContain("source_category");
     expect(trigramColNames).toContain("session_id");
     expect(trigramColNames).toContain("event_id");
     expect(trigramColNames).toContain("timestamp");
-    expect(trigramColNames.length).toBe(10);
+    expect(trigramColNames.length).toBe(9);
 
     db.close();
     store.close();
@@ -152,19 +152,23 @@ describe("Schema & Lifecycle", () => {
     const checkDb = new Database(dbPath, { readonly: true });
     const newCols = checkDb.prepare("SELECT name FROM pragma_table_xinfo('chunks')").all() as Array<{ name: string }>;
     const newColNames = newCols.map(c => c.name);
-    expect(newColNames).toContain("source_category");
+    expect(newColNames).not.toContain("source_category");
     expect(newColNames).toContain("session_id");
     expect(newColNames).toContain("event_id");
     expect(newColNames).toContain("timestamp");
-    expect(newColNames.length).toBe(10);
+    expect(newColNames.length).toBe(9);
 
     const newTrigramCols = checkDb.prepare("SELECT name FROM pragma_table_xinfo('chunks_trigram')").all() as Array<{ name: string }>;
-    expect(newTrigramCols.map(c => c.name)).toContain("source_category");
-    expect(newTrigramCols.length).toBe(10);
+    expect(newTrigramCols.map(c => c.name)).not.toContain("source_category");
+    expect(newTrigramCols.length).toBe(9);
 
-    // Old chunk data is gone (DROP + re-CREATE clears data)
+    // External-content migration PRESERVES every legacy row (spec 5.2 / ADR
+    // 0003): the old chunk is re-inserted into chunks_body and both indexes,
+    // so it survives the rebuild rather than being dropped.
     const chunkCount = checkDb.prepare("SELECT COUNT(*) as cnt FROM chunks").get() as { cnt: number };
-    expect(chunkCount.cnt).toBe(0);
+    expect(chunkCount.cnt).toBe(1);
+    const bodyCount = checkDb.prepare("SELECT COUNT(*) as cnt FROM chunks_body").get() as { cnt: number };
+    expect(bodyCount.cnt).toBe(1);
 
     // Sources table still intact (not dropped)
     const sourceCount = checkDb.prepare("SELECT COUNT(*) as cnt FROM sources").get() as { cnt: number };

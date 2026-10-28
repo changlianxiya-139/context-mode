@@ -494,18 +494,32 @@ describe("purgeSession — issue #520 slice 3: per-session FTS5 chunk wipe", () 
     const srcId = (seedDb.prepare(
       "INSERT INTO sources (label, chunk_count, code_chunk_count) VALUES ('test', 0, 0) RETURNING id"
     ).get() as { id: number }).id;
+    // External-content schema: chunks_body holds the text; both fts indexes are
+    // fed the SAME rowid. Seed through the body so the indexes populate.
+    const insBody = seedDb.prepare(
+      "INSERT INTO chunks_body (title, content, source_id, content_type, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    );
     const ins = seedDb.prepare(
-      "INSERT INTO chunks (title, content, source_id, content_type, source_category, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO chunks (rowid, title, content, source_id, content_type, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
     const insT = seedDb.prepare(
-      "INSERT INTO chunks_trigram (title, content, source_id, content_type, source_category, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO chunks_trigram (rowid, title, content, source_id, content_type, session_id, event_id, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
     const now = new Date().toISOString();
-    ins.run("scratch-1", "alpha", srcId, "code", null, "scratch", null, now);
-    ins.run("scratch-2", "beta",  srcId, "code", null, "scratch", null, now);
-    ins.run("main-1",    "gamma", srcId, "code", null, "main",    null, now);
-    insT.run("scratch-1", "alpha", srcId, "code", null, "scratch", null, now);
-    insT.run("main-1",    "gamma", srcId, "code", null, "main",    null, now);
+    // External-content invariant: every chunks_body row MUST have a matching
+    // entry in BOTH fts indexes at the same rowid. A trigram DELETE resolves
+    // old values by rowid against chunks_body, so a body row missing from the
+    // trigram index corrupts that lookup (SQLite surfaces it as
+    // "database disk image is malformed"). ContentStore.#insertChunks always
+    // writes all three; the seed mirrors that — no per-row trigram opt-out.
+    const seed = (title: string, content: string, sid: string) => {
+      const id = Number(insBody.run(title, content, srcId, "code", sid, null, now).lastInsertRowid);
+      ins.run(id, title, content, srcId, "code", sid, null, now);
+      insT.run(id, title, content, srcId, "code", sid, null, now);
+    };
+    seed("scratch-1", "alpha", "scratch");
+    seed("scratch-2", "beta",  "scratch");
+    seed("main-1",    "gamma", "main");
     seedDb.close();
 
     // Sanity: confirm rows are present BEFORE the purge
@@ -522,10 +536,17 @@ describe("purgeSession — issue #520 slice 3: per-session FTS5 chunk wipe", () 
     const remainingTri = checkAfter.prepare(
       "SELECT title, session_id FROM chunks_trigram ORDER BY title"
     ).all() as Array<{ title: string; session_id: string | null }>;
+    // ADR 0003 hazard 1: an external-content fts DELETE does NOT cascade to
+    // chunks_body, so purgeSession must wipe the body explicitly. Assert the
+    // target session's body rows are gone and the sibling's survive.
+    const remainingBody = checkAfter.prepare(
+      "SELECT title, session_id FROM chunks_body ORDER BY title"
+    ).all() as Array<{ title: string; session_id: string | null }>;
     checkAfter.close();
 
     expect(remaining).toEqual([{ title: "main-1", session_id: "main" }]);
     expect(remainingTri).toEqual([{ title: "main-1", session_id: "main" }]);
+    expect(remainingBody).toEqual([{ title: "main-1", session_id: "main" }]);
     // FTS5 store file MUST still exist
     expect(existsSync(storePath)).toBe(true);
   });
