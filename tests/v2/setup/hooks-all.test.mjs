@@ -195,7 +195,7 @@ test("ADR-0020: doctor fails hook-registered when the hook file lost the entry, 
 // The hash is sha256 of the sorted-key JSON {event_name, matcher?, hooks:[{type, command, timeout, async:false}]}
 // (checked against currentHash from hooks/list for five hooks, D-HA-CODEX-TRUST-1).
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
+// D-TRUST-KEYDIR-2: a default ~/.codex is keyed as spelled (Codex hooks/list on macOS prints /var/..., not /private/var/...).
 const sortKeys = (v) => Array.isArray(v) ? v.map(sortKeys)
   : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v;
 const SNAKE = { PreToolUse: "pre_tool_use", PostToolUse: "post_tool_use", SessionStart: "session_start", UserPromptSubmit: "user_prompt_submit" };
@@ -205,7 +205,7 @@ function codexTrust(file) {
   for (const [ev, groups] of Object.entries(doc.hooks)) groups.forEach((g, gi) => g.hooks.forEach((h, hi) => {
     const id = { event_name: SNAKE[ev], hooks: [{ ...h, async: false }] };
     if (g.matcher !== undefined) id.matcher = g.matcher;
-    out[`${realpathSync(file)}:${SNAKE[ev]}:${gi}:${hi}`] = { cmd: h.command, hash: "sha256:" + createHash("sha256").update(JSON.stringify(sortKeys(id))).digest("hex") };
+    out[`${path.resolve(file)}:${SNAKE[ev]}:${gi}:${hi}`] = { cmd: h.command, hash: "sha256:" + createHash("sha256").update(JSON.stringify(sortKeys(id))).digest("hex") };
   }));
   return out;
 }

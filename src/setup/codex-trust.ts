@@ -42,6 +42,7 @@ function realFile(file: string): string {
 }
 
 const ASK_TIMEOUT_MS = 10_000;
+const ASK_TRIES = 3;
 const WIN_VERBATIM_PREFIX = "\\\\?\\";
 
 /** The `codexHome` of the first JSON line that has one (the `initialize` reply of `codex app-server`); other lines are skipped. */
@@ -61,8 +62,13 @@ export function askCodexHome(env: Record<string, string | undefined>): string | 
   const bin = whichBin("codex", env);
   if (!bin) return undefined;
   const input = JSON.stringify({ id: 1, method: "initialize", params: { clientInfo: { name: "context-mode-setup", version: "2.0.0" } } }) + "\n";
-  const r = spawnShim(bin, ["app-server"], env, { input, encoding: "utf8", timeout: ASK_TIMEOUT_MS });
-  return typeof r.stdout === "string" ? codexHomeFromReply(r.stdout) : undefined;
+  // D-TRUST-KEYDIR-2: app-server may exit with an empty stdout when stdin closes at once (seen on macOS); ask again.
+  for (let i = 0; i < ASK_TRIES; i++) {
+    const r = spawnShim(bin, ["app-server"], env, { input, encoding: "utf8", timeout: ASK_TIMEOUT_MS });
+    const home = typeof r.stdout === "string" ? codexHomeFromReply(r.stdout) : undefined;
+    if (home !== undefined) return home;
+  }
+  return undefined;
 }
 
 /** A dir compared the way the platform compares it: Windows ignores case, the \\?\ prefix, / vs \\ and a trailing separator. */
@@ -76,7 +82,8 @@ function sameDir(a: string, b: string, platform: NodeJS.Platform): boolean {
   return norm(a) === norm(b);
 }
 
-/** The dir that starts every key. Codex's own spelling of our dir when it names that dir; else the real path of our dir. */
+/** The dir that starts every key. (With no CODEX_HOME Codex uses ~/.codex as spelled, so a symlinked HOME is not resolved.)
+ *   Codex's own spelling of our dir when it names that dir; else the real path of our dir. */
 export function codexKeyDir(o: { dir: string; asked?: string; real: (p: string) => string }, platform: NodeJS.Platform = process.platform): string {
   return o.asked !== undefined && sameDir(o.dir, o.asked, platform) ? o.asked : o.real(o.dir);
 }
@@ -87,7 +94,7 @@ export function codexTrustEntries(hooksFile: string, doc: unknown, command: stri
   const out: [readonly string[], unknown][] = [];
   if (!isObj(doc) || !isObj(doc.hooks)) return out;
   const abs = path.resolve(hooksFile);
-  const dir = codexKeyDir({ dir: path.dirname(abs), asked: env ? askCodexHome(env) : undefined, real: realFile });
+  const dir = codexKeyDir({ dir: path.dirname(abs), asked: env ? askCodexHome(env) : undefined, real: env && !env.CODEX_HOME ? (p) => path.resolve(p) : realFile });
   const real = (dir.startsWith(WIN_VERBATIM_PREFIX) ? path.win32 : path).join(dir, path.basename(abs));
   for (const [event, groups] of Object.entries(doc.hooks)) {
     if (!Array.isArray(groups)) continue;

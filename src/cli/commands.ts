@@ -266,7 +266,7 @@ async function remove(ui: Ui): Promise<number> {
 /** setup --print <id>: the manual step from the same registry row setup applies; writes nothing. */
 function printManual(ui: Ui, id: AgentId): number {
   const row = buildRegistry(ui.ctx).find((r) => r.id === id)!;
-  const p = printPlan(row);
+  const p = printPlan(row, ui.ctx.env);
   if (ui.f.json) out(JSON.stringify({ command: "setup", print: p }));
   else out(printText(p));
   return EXIT_OK;

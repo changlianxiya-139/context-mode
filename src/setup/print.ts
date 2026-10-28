@@ -29,13 +29,13 @@ export function shellWord(s: string): string {
   return isShellSafe(s) ? s : `'${s.replaceAll("'", `'"'"'`)}'`;
 }
 
-export function printPlan(row: CheckRow): PrintPlan {
+export function printPlan(row: CheckRow, env?: Record<string, string | undefined>): PrintPlan {
   const steps: PrintStep[] = [];
   const h = row.hookInstall;
   if (row.config) {
     const c = row.config;
     // D-HA-CODEX-TRUST-1: codex trusts its hooks in the same config.toml, so the printed block carries the trust tables.
-    const trust = h.kind === "file" && h.trust === c.file ? codexTrustEntries(h.file, h.shape, h.command) : [];
+    const trust = h.kind === "file" && h.trust === c.file ? codexTrustEntries(h.file, h.shape, h.command, env) : [];
     const block = editHostConfigText(row.id, c.file, "", c.format, [...configEdits(c), ...trust]).text;
     steps.push({ kind: "config", file: c.file, format: c.format, key: c.key, block });
   } else if (row.cli) {
