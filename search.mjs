@@ -236,7 +236,7 @@ var EDIT_TOOLS = Object.freeze(["Write", "Edit"]);
 var EDIT_PATH_KEYS = Object.freeze(["file_path", "path"]);
 var STATS_COLUMNS = Object.freeze(["Scope", "Produced", "Returned", "Saved", "Reduction %"]);
 var PURGE_SCOPES = Object.freeze(["session", "source", "project"]);
-var DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"]);
+var DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10", "D11"]);
 var DOCTOR_LABEL = Object.freeze({
   D1: "version",
   D2: "node",
@@ -248,7 +248,8 @@ var DOCTOR_LABEL = Object.freeze({
   D7: "project and worktree",
   D8: "context.db",
   D9: "index",
-  D10: "enforcement mode"
+  D10: "enforcement mode",
+  D11: "shell"
 });
 var REPORT_TRUNCATED_LINE = `(report truncated at ${REPORT_CAP} B; run ctx_doctor again after the first fix)`;
 var D2_NODE_FIX = `install Node ${NODE_MIN} or later`;
@@ -271,6 +272,9 @@ var GIT_HEAD_SHA_ARGS = Object.freeze(["rev-parse", "HEAD"]);
 var UPGRADE_GIT_CHECKOUT_AGENTS = Object.freeze(["pi", "opencode"]);
 var GIT_NO_PROMPT_ENV = Object.freeze({ GIT_TERMINAL_PROMPT: "0" });
 var GIT_NO_CRLF_ENV = Object.freeze({ GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "false" });
+var GIT_BIN = "git";
+var WIN_SHELL_LANGS = Object.freeze(["shell", "bash", "sh"]);
+var GIT_BASH_RELATIVE = Object.freeze([["..", "bin", "bash.exe"], ["..", "..", "bin", "bash.exe"]]);
 var OPS_SPLIT_FILES = Object.freeze([
   "doctor-env.ts",
   "doctor-config.ts",
@@ -287,10 +291,10 @@ var OPS_SPLIT_FILES = Object.freeze([
 var HOOK_HOST_FILE = Object.freeze({
   "claude-code": { root: "plugin", file: ["hooks", "claude-code.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
   codex: { root: "home", file: [".codex", "hooks.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
-  gemini: { root: "home", file: [".gemini", "settings.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: false },
-  qwen: { root: "home", file: [".qwen", "settings.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
+  gemini: { root: "plugin", file: ["hooks", "hooks.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: false },
+  qwen: { root: "plugin", file: ["hooks", "qwen.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
   "copilot-cli": { root: "home", file: [".copilot", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeoutSec", matcher: false },
-  vscode: { root: "project", file: [".github", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeout", matcher: false },
+  vscode: { root: "home", file: [".copilot", "hooks", "context-mode-vscode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeout", matcher: false },
   kiro: { root: "home", file: [".kiro", "hooks", "context-mode.json"], key: ["hooks"], shape: "kiro", timeoutKey: "timeout", matcher: false },
   zcode: { root: "home", file: [".zcode", "cli", "config.json"], key: ["hooks", "events"], shape: "zcode", timeoutKey: "timeoutMs", matcher: true },
   pi: null,
@@ -324,12 +328,16 @@ var V1_SCRIPT_NAMES = Object.freeze([
 ]);
 var V1_CODEX_HOOKS_DIR = Object.freeze(["hooks", "codex"]);
 var V1_CACHE_HEAL_EXTS = Object.freeze([".mjs", ".sh"]);
+var VSCODE_USER_DIR_SEGMENTS = Object.freeze(["Code", "User"]);
+var VSCODE_MCP_FILE = "mcp.json";
 var KIRO_AGENT_FILE = Object.freeze(["agents", "default.json"]);
 var KIRO_STEERING_FILE = Object.freeze(["steering", "KIRO.md"]);
 var OPENCODE_CONFIG_FILES = Object.freeze(["opencode.jsonc", "opencode.json"]);
 var V1_DATA_ROOT_ENTRIES = Object.freeze(["content", "platform.json"]);
 var PI_ROLE = "custom";
 var V1_PATH_SEPS = Object.freeze(["/", "\\"]);
+var HOST_SEP_TOKEN = "${/}";
+var HOOK_SCRIPT_SEPS = Object.freeze([...V1_PATH_SEPS, HOST_SEP_TOKEN]);
 var V1_REASON = Object.freeze({
   hook: "old context-mode hook entry: command contains context-mode and an old script name or context-mode hook",
   cacheHealHook: "old context-mode cache-heal SessionStart hook entry",
@@ -360,7 +368,7 @@ var CODEX_APPROVAL_MODE_FIELD = "default_tools_approval_mode";
 var CODEX_APPROVAL_APPROVE = "approve";
 var OWN_MCP_ENTRY = Object.freeze({
   codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY], fields: { [CODEX_OMIT_TOOLS_FROM_FIELD]: CODEX_OMIT_DEFERRED, [CODEX_APPROVAL_MODE_FIELD]: CODEX_APPROVAL_APPROVE } },
-  vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
+  vscode: { file: [VSCODE_MCP_FILE], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: {
     file: [".zcode", "cli", "config.json"],
@@ -734,8 +742,14 @@ var VSCODE_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostTool
 var MCP_PREFIX2 = "mcp_";
 var MCP_SEP2 = "_";
 var SESSION_START_NEW = "new";
-var SHELL_TOOL_NAME = "run_in_terminal";
-var NATIVE_TO_CANONICAL4 = { [SHELL_TOOL_NAME]: "Bash" };
+var SHELL_TOOL_NAMES = Object.freeze(["run_in_terminal", "runTerminalCommand", "bash", "powershell"]);
+var READ_TOOL_NAMES = Object.freeze(["read_file", "view"]);
+var WEBFETCH_TOOL_NAMES = Object.freeze(["fetch_webpage", "web_fetch"]);
+var NATIVE_TO_CANONICAL4 = Object.fromEntries([
+  ...SHELL_TOOL_NAMES.map((n) => [n, "Bash"]),
+  ...READ_TOOL_NAMES.map((n) => [n, "Read"]),
+  ...WEBFETCH_TOOL_NAMES.map((n) => [n, "WebFetch"])
+]);
 function canonicalName4(name) {
   if (name.startsWith(TOOL_NAME_PREFIX6)) return name.slice(TOOL_NAME_PREFIX6.length);
   if (Object.hasOwn(NATIVE_TO_CANONICAL4, name)) return NATIVE_TO_CANONICAL4[name];
@@ -744,6 +758,26 @@ function canonicalName4(name) {
   const sep3 = rest.indexOf(MCP_SEP2);
   if (sep3 <= 0 || sep3 === rest.length - 1) return name;
   return "mcp:" + rest.slice(0, sep3) + ":" + rest.slice(sep3 + MCP_SEP2.length);
+}
+var isNum = (v) => typeof v === "number" && Number.isFinite(v);
+function policyInput(name, canonical, input) {
+  if (canonical === "Read" && READ_TOOL_NAMES.includes(name)) {
+    const out = { ...input };
+    if (name === "read_file") {
+      if (typeof input.filePath === "string") out.file_path = input.filePath;
+      if (isNum(input.startLine)) out.offset = input.startLine;
+      if (isNum(input.startLine) && isNum(input.endLine) && input.endLine >= input.startLine) out.limit = input.endLine - input.startLine + 1;
+    } else if (Array.isArray(input.view_range) && isNum(input.view_range[0])) {
+      out.offset = input.view_range[0];
+      const end = input.view_range[1];
+      if (isNum(end) && end >= input.view_range[0]) out.limit = end - input.view_range[0] + 1;
+    }
+    return out;
+  }
+  if (canonical === "WebFetch" && name === "fetch_webpage" && Array.isArray(input.urls) && typeof input.urls[0] === "string") {
+    return { ...input, url: input.urls[0] };
+  }
+  return input;
 }
 function readResult4(resp) {
   const text = resp === void 0 ? "" : typeof resp === "string" ? resp : JSON.stringify(resp);
@@ -792,7 +826,8 @@ function decodeCamel(p, name) {
   if (event === "UserPromptSubmit" && typeof p.prompt === "string") ev.prompt = p.prompt;
   if (event === "PreToolUse" || event === "PostToolUse") {
     const toolName = String(p.toolName ?? "");
-    ev.tool = { name: toolName, canonicalName: canonicalName4(toolName), input: readArgs2(p.toolArgs) };
+    const canonical = canonicalName4(toolName);
+    ev.tool = { name: toolName, canonicalName: canonical, input: policyInput(toolName, canonical, readArgs2(p.toolArgs)) };
   }
   if (event === "PostToolUse") ev.result = readCamelResult(p.toolResult);
   return ev;
@@ -814,7 +849,8 @@ function decode6(raw) {
   if (event === "PreToolUse" || event === "PostToolUse") {
     const name = String(p.tool_name ?? "");
     const input = isRecord2(p.tool_input) ? p.tool_input : {};
-    ev.tool = { name, canonicalName: canonicalName4(name), input };
+    const canonical = canonicalName4(name);
+    ev.tool = { name, canonicalName: canonical, input: policyInput(name, canonical, input) };
   }
   if (event === "PostToolUse") ev.result = readResult4(p.tool_response);
   return ev;
@@ -838,8 +874,8 @@ var KIRO_EVENTS = {
 };
 var PROMPT_ENV = "USER_PROMPT";
 var MCP_PREFIX3 = "mcp_";
-var SHELL_TOOL_NAMES = Object.freeze(["execute_bash", "execute_pwsh", "shell"]);
-var NATIVE_TO_CANONICAL5 = Object.fromEntries(SHELL_TOOL_NAMES.map((n) => [n, "Bash"]));
+var SHELL_TOOL_NAMES2 = Object.freeze(["execute_bash", "execute_pwsh", "shell"]);
+var NATIVE_TO_CANONICAL5 = Object.fromEntries(SHELL_TOOL_NAMES2.map((n) => [n, "Bash"]));
 var MCP_SEP3 = "_";
 var KIRO_SOURCES = { startup: "startup", resume: "resume", clear: "clear", compact: "compact" };
 function canonicalName5(name) {
@@ -980,8 +1016,8 @@ var OPENCODE_EVENTS = {
   compaction: "PreCompact",
   "step-finish": "Usage"
 };
-var SHELL_TOOL_NAME2 = "bash";
-var NATIVE_TO_CANONICAL7 = { webfetch: "WebFetch", [SHELL_TOOL_NAME2]: "Bash" };
+var SHELL_TOOL_NAME = "bash";
+var NATIVE_TO_CANONICAL7 = { webfetch: "WebFetch", [SHELL_TOOL_NAME]: "Bash" };
 function toCanonicalTool(name) {
   if (name.startsWith(OWN_WIRE_PREFIX)) return name.slice(OWN_WIRE_PREFIX.length);
   return Object.prototype.hasOwnProperty.call(NATIVE_TO_CANONICAL7, name) ? NATIVE_TO_CANONICAL7[name] : name;
@@ -1130,7 +1166,8 @@ var ADAPTERS = Object.freeze([
     projectSource: "arg:workspaceFolder",
     toolNamePrefix: TOOL_NAME_PREFIX6,
     // PreCompact sets the pending flag (ADR-0009 §6, DEVIATIONS D-M3-A4-1).
-    nativeTools: { shell: [SHELL_TOOL_NAME] },
+    nativeTools: { shell: [...SHELL_TOOL_NAMES], read: [...READ_TOOL_NAMES], webfetch: [...WEBFETCH_TOOL_NAMES] },
+    // D-HF-VSCODE-PROJECT-1, D-N7-VSCODE-TOOLS-1
     execReadOnlyHint: false,
     eventMap: { ...CLAUDE_EVENTS, PreCompact: "PreCompact" },
     compactDelivery: "pending-flag",
@@ -1148,7 +1185,7 @@ var ADAPTERS = Object.freeze([
     installMode: "mcp-entry",
     projectSource: "arg:--agent+cwd",
     toolNamePrefix: TOOL_NAME_PREFIX7,
-    nativeTools: { shell: [...SHELL_TOOL_NAMES] },
+    nativeTools: { shell: [...SHELL_TOOL_NAMES2] },
     execReadOnlyHint: false,
     // D-HF-KIRO-SHELL-1, D-N7-KIRO-1
     eventMap: { SessionStart: "SessionStart", UserPromptSubmit: "UserPromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse" },
@@ -1205,7 +1242,7 @@ var ADAPTERS = Object.freeze([
     installMode: "in-process",
     projectSource: "spawn-cwd",
     toolNamePrefix: TOOL_NAME_PREFIX10,
-    nativeTools: { shell: [SHELL_TOOL_NAME2] },
+    nativeTools: { shell: [SHELL_TOOL_NAME] },
     execReadOnlyHint: false,
     // D-HF-OPENCODE-SHELL-1
     // Usage: step-finish cost row (DEVIATIONS D-M5-arch-2).
@@ -1243,6 +1280,8 @@ var ERROR_TEXT = Object.freeze({
   NO_PROJECT: "Project source <kind> is missing. Fix: run ctx_doctor.",
   UNKNOWN_FIELD: 'Unknown field "<f>". Fix: use "queries".',
   TIMEOUT: "Timed out after <ms> ms. Fix: pass background: true.",
+  NO_GIT_BASH: "Git Bash not found. Fix: install Git for Windows.",
+  // D-VT-WINBASH-1
   NO_RUNTIME: "No <lang> runtime on PATH. Fix: install it or pick another language.",
   FETCH_FAILED: "Fetch failed: <code>. Fix: check the URL or proxy.",
   SSRF: "Blocked private address <host>. Fix: use a public URL.",
@@ -4247,22 +4286,25 @@ function parseShell(cmd) {
 import { join as join2 } from "node:path";
 
 // src/core/project/config-dir.ts
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 var { mkdirSync: mkdirSync2, realpathSync } = process.getBuiltinModule("node:fs");
-function homeDirOf(env) {
-  const home = env.HOME;
-  if (home !== void 0 && home !== "") return home;
-  const profile = env.USERPROFILE;
-  if (profile !== void 0 && profile !== "") return profile;
-  return null;
+function homeDirOf(env, platform = process.platform) {
+  const set = (v) => v !== void 0 && v !== "";
+  if (platform === "win32") {
+    if (set(env.USERPROFILE)) return env.USERPROFILE;
+    if (set(env.HOMEDRIVE) && set(env.HOMEPATH)) return env.HOMEDRIVE + env.HOMEPATH;
+    return set(env.HOME) ? env.HOME : null;
+  }
+  if (set(env.HOME)) return env.HOME;
+  return set(env.USERPROFILE) ? env.USERPROFILE : null;
 }
-function homeOf(env) {
-  const home = homeDirOf(env);
+function requireHomeDir(env, platform = process.platform) {
+  const home = homeDirOf(env, platform);
   if (home !== null) return home;
-  throw new CtxError("NO_HOME", { name: process.platform === "win32" ? "USERPROFILE" : "HOME" });
+  throw new CtxError("NO_HOME", { name: platform === "win32" ? "USERPROFILE" : "HOME" });
 }
 function resolveConfigDir(env) {
-  const dir = join(homeOf(env), DATA_ROOT.slice(1));
+  const dir = join(requireHomeDir(env), DATA_ROOT.slice(1));
   mkdirSync2(dir, { recursive: true });
   return realpathSync.native(dir);
 }
@@ -5004,7 +5046,7 @@ function firstLine(file) {
 }
 function git(dir, args) {
   const { spawnSync } = process.getBuiltinModule("node:child_process");
-  const r = spawnSync("git", args, { cwd: dir, shell: false, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const r = spawnSync("git", args, { cwd: dir, shell: false, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   if (r.error !== void 0 || r.status !== 0) throw new CtxError("NO_GIT_DIR", { path: dir });
   return r.stdout.split("\n").filter((l) => l !== "");
 }
@@ -5079,6 +5121,14 @@ function buildChildEnv(parent, extra) {
 // src/core/sandbox/runtimes.ts
 import { accessSync, constants as fsConstants, statSync as statSync3 } from "node:fs";
 import path from "node:path";
+
+// src/core/sandbox/path-entries.ts
+function pathEntries(value, platform = process.platform, delimiter = platform === "win32" ? ";" : ":") {
+  const win = platform === "win32";
+  return value.split(delimiter).map((e) => win && e.length >= 2 && e.startsWith('"') && e.endsWith('"') ? e.slice(1, -1) : e).filter(Boolean);
+}
+
+// src/core/sandbox/runtimes.ts
 var PATHEXT_SEPARATOR = ";";
 var WIN_STARTABLE_EXT = Object.freeze([".exe", ".com"]);
 function isWin() {
@@ -5088,7 +5138,7 @@ function candidates(lang) {
   const win = isWin();
   switch (lang) {
     case "shell":
-      return win ? ["sh.exe", "bash.exe"] : ["sh"];
+      return win ? [] : ["sh"];
     case "powershell":
       return ["pwsh", "pwsh.exe", "powershell.exe"];
     case "javascript":
@@ -5119,7 +5169,8 @@ function isRunnable(full) {
   }
 }
 function findRuntime(lang, env = process.env) {
-  const dirs = (env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
+  if (isWin() && WIN_SHELL_LANGS.includes(lang)) return findGitBash(env);
+  const dirs = pathEntries(env.PATH ?? "", process.platform, path.delimiter);
   const pathExt = isWin() ? (env.PATHEXT ?? PATHEXT_DEFAULT).split(PATHEXT_SEPARATOR).filter((e) => e !== "") : [];
   const names = candidates(lang);
   let shim = null;
@@ -5134,6 +5185,18 @@ function findRuntime(lang, env = process.env) {
     }
   }
   return shim;
+}
+function findGitBash(env) {
+  const git2 = findRuntime(GIT_BIN, env);
+  if (git2 === null) return null;
+  for (const rel of GIT_BASH_RELATIVE) {
+    const full = path.resolve(path.dirname(git2), ...rel);
+    if (isRunnable(full)) return full;
+  }
+  return null;
+}
+function noRuntimeError(lang) {
+  return isWin() && WIN_SHELL_LANGS.includes(lang) ? new CtxError("NO_GIT_BASH") : new CtxError("NO_RUNTIME", { lang });
 }
 
 // src/core/sandbox/spawn.ts
@@ -5641,7 +5704,7 @@ async function runWrapperMain(argv, env) {
   if (d.kind === "deny" && userPolicyDeny(d.reason)) return exit(RUN_FAIL_EXIT, "", d.reason + "\n");
   try {
     const runtime = findRuntime(SHELL);
-    if (runtime === null) throw new CtxError("NO_RUNTIME", { lang: SHELL });
+    if (runtime === null) throw noRuntimeError(SHELL);
     const project = projectOf(argv, cwd);
     const r = await runProcess([runtime, "-c", command], {
       cwd,
